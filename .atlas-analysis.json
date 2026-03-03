@@ -1,0 +1,197 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Jotai",
+  "projectDescription": "Primitive and flexible state management for React",
+  "theme": "mint",
+  "primaryColor": "#7c3aed",
+  "lightColor": "#a78bfa",
+  "darkColor": "#5b21b6",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core/atoms",
+              "core/providers",
+              "core/store",
+              "core/use-atom",
+              "core/async"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "utilities/atom-with-storage",
+              "utilities/atom-family",
+              "utilities/atom-with-reset",
+              "utilities/atom-with-reducer",
+              "utilities/atom-with-default",
+              "utilities/atom-with-observable",
+              "utilities/select-atom",
+              "utilities/split-atom",
+              "utilities/loadable",
+              "utilities/unwrap",
+              "utilities/freeze-atom"
+            ]
+          },
+          {
+            "group": "React Hooks",
+            "pages": [
+              "hooks/use-atom-value",
+              "hooks/use-set-atom",
+              "hooks/use-reset-atom",
+              "hooks/use-reducer-atom",
+              "hooks/use-atom-callback",
+              "hooks/use-hydrate-atoms"
+            ]
+          },
+          {
+            "group": "Extensions",
+            "pages": [
+              "extensions/query",
+              "extensions/cache",
+              "extensions/immer",
+              "extensions/optics",
+              "extensions/xstate",
+              "extensions/valtio",
+              "extensions/zustand",
+              "extensions/redux",
+              "extensions/tRPC",
+              "extensions/urql",
+              "extensions/effect",
+              "extensions/location",
+              "extensions/molecules"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/typescript",
+              "guides/nextjs",
+              "guides/react-native",
+              "guides/vite",
+              "guides/remix",
+              "guides/testing",
+              "guides/debugging",
+              "guides/performance",
+              "guides/persistence",
+              "guides/async-patterns",
+              "guides/composing-atoms"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/core-internals",
+              "advanced/store-outside-react",
+              "advanced/atoms-in-atom",
+              "advanced/initialize-on-render",
+              "advanced/resettable"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "resources/comparison",
+              "resources/showcase",
+              "resources/migration-guide"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/atom",
+              "api/use-atom",
+              "api/use-atom-value",
+              "api/use-set-atom",
+              "api/provider",
+              "api/create-store",
+              "api/get-default-store"
+            ]
+          },
+          {
+            "group": "Utilities API",
+            "pages": [
+              "api/utils/atom-with-storage",
+              "api/utils/atom-family",
+              "api/utils/atom-with-reset",
+              "api/utils/atom-with-reducer",
+              "api/utils/atom-with-default",
+              "api/utils/atom-with-refresh",
+              "api/utils/atom-with-observable",
+              "api/utils/atom-with-lazy",
+              "api/utils/select-atom",
+              "api/utils/split-atom",
+              "api/utils/freeze-atom",
+              "api/utils/loadable",
+              "api/utils/unwrap"
+            ]
+          },
+          {
+            "group": "React Hooks API",
+            "pages": [
+              "api/hooks/use-reset-atom",
+              "api/hooks/use-reducer-atom",
+              "api/hooks/use-atom-callback",
+              "api/hooks/use-hydrate-atoms"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Minimal core API (2kb)",
+    "Atomic state management",
+    "Derived and computed atoms",
+    "Async atoms with Suspense support",
+    "TypeScript-first design",
+    "Framework integrations (Next.js, React Native, etc.)",
+    "Extensive utilities and extensions",
+    "No string keys required"
+  ],
+  "publicApiSurface": [
+    "atom",
+    "useAtom",
+    "useAtomValue",
+    "useSetAtom",
+    "Provider",
+    "useStore",
+    "createStore",
+    "getDefaultStore",
+    "atomWithStorage",
+    "atomFamily",
+    "atomWithReset",
+    "atomWithReducer",
+    "atomWithDefault",
+    "atomWithObservable",
+    "selectAtom",
+    "splitAtom",
+    "freezeAtom",
+    "loadable",
+    "unwrap",
+    "atomWithRefresh",
+    "atomWithLazy",
+    "useResetAtom",
+    "useReducerAtom",
+    "useAtomCallback",
+    "useHydrateAtoms",
+    "RESET"
+  ]
+}
