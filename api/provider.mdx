@@ -242,9 +242,45 @@ function App() {
 - Provider is essential for SSR to ensure each request gets its own state
 - Useful for testing to ensure test isolation
 
+## useStore Hook
+
+The `useStore` hook returns the store from the nearest `Provider` ancestor, or the default store if no Provider exists.
+
+### Signature
+
+```typescript
+function useStore(options?: { store?: Store }): Store
+```
+
+### Usage
+
+```typescript
+import { useStore } from 'jotai'
+
+function MyComponent() {
+  const store = useStore()
+  
+  // Use the store imperatively
+  const count = store.get(countAtom)
+  store.set(countAtom, count + 1)
+}
+```
+
+### With options
+
+```typescript
+import { useStore, createStore } from 'jotai'
+
+const customStore = createStore()
+
+function MyComponent() {
+  // Force using a specific store
+  const store = useStore({ store: customStore })
+}
+```
+
 ## Related APIs
 
 - [createStore](/api/create-store) - Create a custom store instance
 - [getDefaultStore](/api/get-default-store) - Get the default global store
 - [useAtom](/api/use-atom) - Read and write atoms within a Provider
-- [useStore](/api/use-store) - Access the current Provider's store
