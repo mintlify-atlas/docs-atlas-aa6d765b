@@ -1,0 +1,434 @@
+---
+title: Async State Patterns
+description: Patterns for handling async state with Jotai
+---
+
+Jotai has first-class support for async state using React Suspense. This guide covers async patterns and best practices.
+
+## Async Atom Types
+
+There are two main types of async atoms:
+
+- **Async read atoms**: Fetch data when accessed
+- **Async write atoms**: Perform async actions when called
+
+## Async Read Atoms
+
+Async read atoms fetch data automatically:
+
+```tsx
+import { atom, useAtom } from 'jotai'
+import { Suspense } from 'react'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+function UserProfile() {
+  const [user] = useAtom(userAtom)
+  // user is always the resolved value, not a Promise
+  return <div>{user.name}</div>
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UserProfile />
+    </Suspense>
+  )
+}
+```
+
+### Dependent Async Atoms
+
+Chain async atoms that depend on each other:
+
+```tsx
+const userIdAtom = atom(1)
+
+const userAtom = atom(async (get) => {
+  const userId = get(userIdAtom)
+  const response = await fetch(`/api/user/${userId}`)
+  return response.json()
+})
+
+const postsAtom = atom(async (get) => {
+  const user = await get(userAtom)
+  const response = await fetch(`/api/posts?userId=${user.id}`)
+  return response.json()
+})
+```
+
+<Note>
+When reading an async atom in another atom, you must await it and make the reader async too.
+</Note>
+
+## Async Write Atoms
+
+Async write atoms perform actions:
+
+```tsx
+const countAtom = atom(0)
+
+const asyncIncrementAtom = atom(
+  null,
+  async (get, set) => {
+    // Simulate async operation
+    await delay(1000)
+    set(countAtom, get(countAtom) + 1)
+  }
+)
+
+function Counter() {
+  const [count] = useAtom(countAtom)
+  const [, increment] = useAtom(asyncIncrementAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={increment}>Increment (async)</button>
+    </div>
+  )
+}
+```
+
+## Suspense Usage
+
+Wrap components using async atoms in Suspense:
+
+```tsx
+import { Suspense } from 'react'
+
+function App() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <AsyncComponent />
+    </Suspense>
+  )
+}
+```
+
+### Multiple Suspense Boundaries
+
+Use multiple boundaries for granular loading states:
+
+```tsx
+function Dashboard() {
+  return (
+    <div>
+      <Suspense fallback={<UserLoading />}>
+        <UserProfile />
+      </Suspense>
+      
+      <Suspense fallback={<PostsLoading />}>
+        <PostsList />
+      </Suspense>
+    </div>
+  )
+}
+```
+
+### Suspense with Provider
+
+<Note>
+Place Suspense **inside** your Provider, not outside. Otherwise, you may get endless loops.
+</Note>
+
+```tsx
+// Good
+function App() {
+  return (
+    <Provider>
+      <Suspense fallback="Loading...">
+        <YourApp />
+      </Suspense>
+    </Provider>
+  )
+}
+
+// Bad - can cause endless loops
+function App() {
+  return (
+    <Suspense fallback="Loading...">
+      <Provider>
+        <YourApp />
+      </Provider>
+    </Suspense>
+  )
+}
+```
+
+## Loadable API
+
+Avoid Suspense using the `loadable` wrapper:
+
+```tsx
+import { loadable } from 'jotai/utils'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+const loadableUserAtom = loadable(userAtom)
+
+function UserProfile() {
+  const [userLoadable] = useAtom(loadableUserAtom)
+  
+  if (userLoadable.state === 'loading') {
+    return <div>Loading...</div>
+  }
+  
+  if (userLoadable.state === 'hasError') {
+    return <div>Error: {userLoadable.error.message}</div>
+  }
+  
+  if (userLoadable.state === 'hasData') {
+    return <div>User: {userLoadable.data.name}</div>
+  }
+}
+```
+
+No Suspense boundary needed!
+
+## Async Sometimes Pattern
+
+Switch between sync and async to trigger Suspense:
+
+```tsx
+import { atom, useAtom } from 'jotai'
+
+const dataAtom = atom<Data | Promise<Data>>(initialData)
+
+function Component() {
+  const [data, setData] = useAtom(dataAtom)
+  
+  const refresh = () => {
+    // Setting a Promise triggers Suspense
+    setData(fetch('/api/data').then(r => r.json()))
+  }
+  
+  return (
+    <div>
+      <button onClick={refresh}>Refresh</button>
+      {/* Component suspends during refresh */}
+    </div>
+  )
+}
+
+// Wrap in Suspense
+function App() {
+  return (
+    <Suspense fallback="Refreshing...">
+      <Component />
+    </Suspense>
+  )
+}
+```
+
+### TypeScript for Async Sometimes
+
+```tsx
+interface User {
+  id: string
+  name: string
+}
+
+// Accept both sync and async values
+const userAtom = atom<User | Promise<User>>({
+  id: '1',
+  name: 'Guest'
+})
+```
+
+## Async Forever Pattern
+
+Suspend indefinitely until explicitly resolved:
+
+```tsx
+const suspendedAtom = atom(new Promise(() => {}))
+// Will suspend until you set it to a different value
+
+function Component() {
+  const [, setSuspended] = useAtom(suspendedAtom)
+  
+  const load = async () => {
+    const data = await fetchData()
+    setSuspended(data) // Resolves suspension
+  }
+  
+  return <button onClick={load}>Load Data</button>
+}
+```
+
+## Error Handling
+
+Handle errors with Error Boundaries:
+
+```tsx
+import { ErrorBoundary } from 'react-error-boundary'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  if (!response.ok) {
+    throw new Error('Failed to fetch user')
+  }
+  return response.json()
+})
+
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>Error loading user</div>}>
+      <Suspense fallback={<div>Loading...</div>}>
+        <UserProfile />
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+```
+
+### Manual Error Handling
+
+Handle errors manually with loadable:
+
+```tsx
+import { loadable } from 'jotai/utils'
+
+const loadableUserAtom = loadable(userAtom)
+
+function UserProfile() {
+  const [userLoadable] = useAtom(loadableUserAtom)
+  
+  if (userLoadable.state === 'hasError') {
+    return (
+      <div>
+        <h3>Error</h3>
+        <p>{userLoadable.error.message}</p>
+        <button onClick={retry}>Retry</button>
+      </div>
+    )
+  }
+  
+  // Handle loading and success states...
+}
+```
+
+## Refresh Pattern
+
+Implement data refreshing:
+
+```tsx
+const refreshCountAtom = atom(0)
+
+const userAtom = atom(async (get) => {
+  get(refreshCountAtom) // Add dependency
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+const refreshUserAtom = atom(
+  null,
+  (get, set) => {
+    set(refreshCountAtom, get(refreshCountAtom) + 1)
+  }
+)
+
+function UserProfile() {
+  const [user] = useAtom(userAtom)
+  const [, refresh] = useAtom(refreshUserAtom)
+  
+  return (
+    <div>
+      <p>{user.name}</p>
+      <button onClick={refresh}>Refresh</button>
+    </div>
+  )
+}
+```
+
+## Abort Controller Pattern
+
+Cancel in-flight requests:
+
+```tsx
+const searchQueryAtom = atom('')
+
+const searchResultsAtom = atom(async (get, { signal }) => {
+  const query = get(searchQueryAtom)
+  
+  if (!query) return []
+  
+  const response = await fetch(`/api/search?q=${query}`, { signal })
+  return response.json()
+})
+
+function Search() {
+  const [query, setQuery] = useAtom(searchQueryAtom)
+  const [results] = useAtom(searchResultsAtom)
+  
+  return (
+    <div>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {/* Previous requests are cancelled when query changes */}
+      {results.map(r => <div key={r.id}>{r.name}</div>)}
+    </div>
+  )
+}
+```
+
+## SSR Considerations
+
+Avoid async atoms during SSR:
+
+```tsx
+const userAtom = atom(async (get) => {
+  // Guard against SSR
+  if (typeof window === 'undefined') {
+    return null // or default value
+  }
+  
+  const response = await fetch('/api/user')
+  return response.json()
+})
+```
+
+Better approach: Fetch in server and hydrate:
+
+```tsx
+export async function getServerSideProps() {
+  const user = await fetchUser()
+  return { props: { user } }
+}
+
+export default function Page({ user }) {
+  return (
+    <Provider>
+      <HydrateAtoms initialValues={[[userAtom, user]]}>
+        <UserProfile />
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+```
+
+## Tips
+
+<Tip>
+Use Suspense for loading states in async atoms. It's built into React and provides the best user experience.
+</Tip>
+
+<Tip>
+Use `loadable` when you need manual control over loading, error, and data states without Suspense.
+</Tip>
+
+<Tip>
+Chain async atoms by awaiting dependent atoms in the read function. Remember to make the reader async.
+</Tip>
+
+<Note>
+Always place Suspense boundaries **inside** your Provider to avoid endless rendering loops.
+</Note>

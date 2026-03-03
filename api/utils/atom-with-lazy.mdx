@@ -1,0 +1,173 @@
+---
+title: atomWithLazy
+description: API reference for atomWithLazy utility
+---
+
+`atomWithLazy` creates a primitive atom with a lazy initialization function that is only called when needed.
+
+## Import
+
+```typescript
+import { atomWithLazy } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+function atomWithLazy<Value>(
+  makeInitial: () => Value,
+): PrimitiveAtom<Value>
+```
+
+## Parameters
+
+<ParamField path="makeInitial" type="() => Value" required>
+  A function that returns the initial value. This function is called lazily only when the atom is first read, not when the atom is created
+</ParamField>
+
+## Return Value
+
+Returns a primitive atom (writable atom) that:
+- Initializes lazily when first read
+- Behaves like a regular primitive atom after initialization
+
+## Usage Example
+
+```typescript
+import { useAtom } from 'jotai'
+import { atomWithLazy } from 'jotai/utils'
+
+// Expensive computation only runs when needed
+const expensiveAtom = atomWithLazy(() => {
+  console.log('Computing initial value...')
+  return Array.from({ length: 10000 }, (_, i) => i).reduce((a, b) => a + b, 0)
+})
+
+function Component() {
+  const [value, setValue] = useAtom(expensiveAtom)
+
+  return (
+    <div>
+      <p>Value: {value}</p>
+      <button onClick={() => setValue(0)}>Reset</button>
+    </div>
+  )
+}
+```
+
+## Date/Time Example
+
+```typescript
+import { atomWithLazy } from 'jotai/utils'
+
+// Initial timestamp is captured when first read, not when defined
+const createdAtAtom = atomWithLazy(() => Date.now())
+
+function CreatedAt() {
+  const [createdAt] = useAtom(createdAtAtom)
+
+  return (
+    <div>
+      Created at: {new Date(createdAt).toLocaleString()}
+    </div>
+  )
+}
+```
+
+## Random Initial Value
+
+```typescript
+import { atomWithLazy } from 'jotai/utils'
+
+// Each atom instance gets a different random ID when first read
+const sessionIdAtom = atomWithLazy(() => {
+  return Math.random().toString(36).substring(7)
+})
+
+function Session() {
+  const [sessionId, setSessionId] = useAtom(sessionIdAtom)
+
+  return (
+    <div>
+      <p>Session ID: {sessionId}</p>
+      <button onClick={() => setSessionId(Math.random().toString(36).substring(7))}>
+        Regenerate
+      </button>
+    </div>
+  )
+}
+```
+
+## Local Storage with Lazy Initialization
+
+```typescript
+import { atomWithLazy } from 'jotai/utils'
+
+// Only access localStorage when the atom is actually used
+const userPreferencesAtom = atomWithLazy(() => {
+  const stored = localStorage.getItem('preferences')
+  return stored ? JSON.parse(stored) : { theme: 'light', language: 'en' }
+})
+
+function Preferences() {
+  const [preferences, setPreferences] = useAtom(userPreferencesAtom)
+
+  const updatePreferences = (updates: Partial<typeof preferences>) => {
+    const newPreferences = { ...preferences, ...updates }
+    setPreferences(newPreferences)
+    localStorage.setItem('preferences', JSON.stringify(newPreferences))
+  }
+
+  return (
+    <div>
+      <p>Theme: {preferences.theme}</p>
+      <button onClick={() => updatePreferences({ theme: 'dark' })}>
+        Dark Mode
+      </button>
+    </div>
+  )
+}
+```
+
+## Comparison with Regular Atom
+
+```typescript
+import { atom } from 'jotai'
+import { atomWithLazy } from 'jotai/utils'
+
+// Regular atom: initialization runs immediately when module loads
+const regularAtom = atom(() => {
+  console.log('Regular: initialized immediately')
+  return Date.now()
+})()
+
+// Lazy atom: initialization runs only when first read
+const lazyAtom = atomWithLazy(() => {
+  console.log('Lazy: initialized when first read')
+  return Date.now()
+})
+```
+
+## Avoiding Module-Level Side Effects
+
+```typescript
+import { atomWithLazy } from 'jotai/utils'
+
+// Bad: runs immediately, might access unavailable APIs
+// const configAtom = atom(window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+// Good: only accesses window when actually used
+const configAtom = atomWithLazy(() =>
+  typeof window !== 'undefined'
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+    : false
+)
+```
+
+## Notes
+
+- The initialization function is only called once, when the atom is first read
+- After initialization, it behaves exactly like a primitive atom created with `atom(value)`
+- Useful for expensive computations or accessing APIs that might not be available at module load time
+- The atom is still writable; you can update it like any primitive atom
+- In SSR environments, this helps avoid accessing browser-only APIs during module evaluation

@@ -1,0 +1,142 @@
+---
+title: Introduction to Jotai
+description: Primitive and flexible state management for React
+---
+
+# Introduction to Jotai
+
+Jotai is a primitive and flexible state management library for React. It scales from a simple `useState` replacement to an enterprise TypeScript application with minimal core API footprint.
+
+<Card title="What is Jotai?" icon="atom">
+  Jotai takes an atomic approach to global React state management with a bottom-up approach. You define small, independent pieces of state (atoms) and compose them together. This gives you maximum flexibility while keeping your code simple and maintainable.
+</Card>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Minimal Core" icon="feather">
+    Just **2kb** core bundle size. No boilerplate, no configuration required.
+  </Card>
+  
+  <Card title="TypeScript First" icon="code">
+    Built with TypeScript from the ground up with full type safety.
+  </Card>
+  
+  <Card title="No String Keys" icon="key">
+    Unlike Recoil, atoms are defined by reference, not by string keys.
+  </Card>
+  
+  <Card title="React Suspense" icon="spinner">
+    Native support for async atoms and React Suspense out of the box.
+  </Card>
+</CardGroup>
+
+## Quick Example
+
+Here's a simple counter to show how Jotai works:
+
+```jsx
+import { atom, useAtom } from 'jotai'
+
+// Create a primitive atom
+const countAtom = atom(0)
+
+function Counter() {
+  // Use it like useState
+  const [count, setCount] = useAtom(countAtom)
+  
+  return (
+    <div>
+      <h1>{count}</h1>
+      <button onClick={() => setCount((c) => c + 1)}>Increment</button>
+    </div>
+  )
+}
+```
+
+That's it! No providers, no context, no boilerplate. Just define your atom and use it.
+
+## Core Concepts
+
+Jotai is built around a few simple concepts:
+
+### Atoms
+
+Atoms are units of state. You can think of them as individual pieces of state that can be read and written to.
+
+```jsx
+import { atom } from 'jotai'
+
+const countAtom = atom(0)
+const nameAtom = atom('Jotai')
+const todosAtom = atom(['Buy milk', 'Walk dog'])
+```
+
+### Derived Atoms
+
+Derived atoms compute their value from other atoms:
+
+```jsx
+const doubledCountAtom = atom((get) => get(countAtom) * 2)
+```
+
+### Writable Derived Atoms
+
+You can also create atoms that derive their value but can be written to:
+
+```jsx
+const decrementAtom = atom(
+  (get) => get(countAtom),
+  (get, set, _arg) => set(countAtom, get(countAtom) - 1)
+)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running with Jotai in 5 minutes
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/core/atoms">
+    Learn about atoms, derived state, and async patterns
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/atom">
+    Complete API documentation for all Jotai functions
+  </Card>
+  
+  <Card title="Guides" icon="compass" href="/guides/typescript">
+    Patterns and best practices for common use cases
+  </Card>
+</CardGroup>
+
+## Why Jotai?
+
+<AccordionGroup>
+  <Accordion title="Simple and Flexible">
+    Jotai's API surface is tiny - just `atom` and a few hooks. But don't let that fool you - you can build complex state management with these simple primitives. There's no configuration, no boilerplate, and no magic.
+  </Accordion>
+  
+  <Accordion title="Performance by Default">
+    Jotai only re-renders components that actually use the atoms that changed. No manual optimization needed - it's fast out of the box.
+  </Accordion>
+  
+  <Accordion title="TypeScript Native">
+    Jotai is written in TypeScript and provides excellent type inference. Your atoms will be fully typed without any extra work.
+  </Accordion>
+  
+  <Accordion title="Async Made Easy">
+    Async state is a first-class citizen in Jotai. Just make your atom read function async and Jotai handles the rest with React Suspense.
+  </Accordion>
+  
+  <Accordion title="Testable">
+    Because atoms are just plain objects and don't require providers, testing is straightforward. No complex setup needed.
+  </Accordion>
+</AccordionGroup>
+
+## Philosophy
+
+Jotai's fluid interface is based on functional programming concepts - atoms are monads, just like promises! This gives you a modular, pure, robust and understandable codebase that's optimized for change.
+
+Learn more about [Jotai and functional programming](https://jotai.org/docs/basics/functional-programming-and-jotai).

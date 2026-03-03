@@ -1,0 +1,379 @@
+---
+title: useAtom
+description: Learn how to use the useAtom hook to read and write atom state in React components
+---
+
+The `useAtom` hook is the primary way to interact with atoms in React components. It returns a tuple with the atom's current value and a function to update it, similar to `React.useState`.
+
+## Basic Usage
+
+```tsx
+import { atom, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+      <button onClick={() => setCount(c => c - 1)}>Decrement</button>
+    </div>
+  )
+}
+```
+
+## Type Signature
+
+```typescript
+export function useAtom<Value, Args extends unknown[], Result>(
+  atom: WritableAtom<Value, Args, Result>,
+  options?: Options,
+): [Awaited<Value>, SetAtom<Args, Result>]
+
+export function useAtom<Value>(
+  atom: Atom<Value>,
+  options?: Options,
+): [Awaited<Value>, never]
+```
+
+The hook returns:
+- The atom's current value (unwrapped if it's a Promise)
+- A setter function that accepts the atom's write arguments
+
+## Implementation
+
+Internally, `useAtom` combines `useAtomValue` and `useSetAtom`:
+
+```typescript
+export function useAtom<Value, Args extends unknown[], Result>(
+  atom: Atom<Value> | WritableAtom<Value, Args, Result>,
+  options?: Options,
+) {
+  return [
+    useAtomValue(atom, options),
+    useSetAtom(atom as WritableAtom<Value, Args, Result>, options),
+  ]
+}
+```
+
+## Setter Functions
+
+### Direct Values
+
+Set the atom to a new value directly:
+
+```tsx
+const [count, setCount] = useAtom(countAtom)
+setCount(5) // count is now 5
+```
+
+### Updater Functions
+
+Pass a function that receives the previous value:
+
+```tsx
+const [count, setCount] = useAtom(countAtom)
+setCount(c => c + 1) // Increment by 1
+```
+
+### Custom Arguments
+
+For derived writable atoms with custom write functions:
+
+```tsx
+const incrementByAtom = atom(
+  (get) => get(countAtom),
+  (get, set, by: number) => set(countAtom, get(countAtom) + by)
+)
+
+function Counter() {
+  const [count, incrementBy] = useAtom(incrementByAtom)
+  
+  return (
+    <div>
+      <p>{count}</p>
+      <button onClick={() => incrementBy(5)}>+5</button>
+      <button onClick={() => incrementBy(10)}>+10</button>
+    </div>
+  )
+}
+```
+
+## Read-Only Atoms
+
+When using `useAtom` with a read-only atom, the setter will be typed as `never`:
+
+```tsx
+const doubleCountAtom = atom((get) => get(countAtom) * 2)
+
+function DoubleCounter() {
+  const [doubleCount] = useAtom(doubleCountAtom)
+  // No setter available for read-only atoms
+  
+  return <p>Double: {doubleCount}</p>
+}
+```
+
+<Tip>
+  For read-only atoms, use `useAtomValue` instead of `useAtom` for clearer intent.
+</Tip>
+
+## Write-Only Atoms
+
+For write-only atoms (created with `atom(null, writeFunction)`), the value will be `null`:
+
+```tsx
+const incrementAtom = atom(
+  null,
+  (get, set) => set(countAtom, get(countAtom) + 1)
+)
+
+function IncrementButton() {
+  const [, increment] = useAtom(incrementAtom)
+  
+  return <button onClick={increment}>Increment</button>
+}
+```
+
+<Tip>
+  For write-only atoms, use `useSetAtom` instead of `useAtom` to avoid the unused value.
+</Tip>
+
+## Options
+
+### store
+
+Use a specific store instead of the one from Provider:
+
+```tsx
+import { createStore, useAtom } from 'jotai'
+
+const myStore = createStore()
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom, { store: myStore })
+  return <div>{count}</div>
+}
+```
+
+## Related Hooks
+
+### useAtomValue
+
+Use `useAtomValue` when you only need to read the atom's value:
+
+```tsx
+import { useAtomValue } from 'jotai'
+
+function Display() {
+  const count = useAtomValue(countAtom)
+  return <p>{count}</p>
+}
+```
+
+This prevents unnecessary re-renders when you don't need the setter.
+
+### useSetAtom
+
+Use `useSetAtom` when you only need to update the atom:
+
+```tsx
+import { useSetAtom } from 'jotai'
+
+function IncrementButton() {
+  const setCount = useSetAtom(countAtom)
+  return <button onClick={() => setCount(c => c + 1)}>+</button>
+}
+```
+
+This prevents re-renders when the atom's value changes.
+
+<Note>
+  The examples in the Jotai source code often have comments like:
+  ```tsx
+  // Use `useSetAtom` to avoid re-render
+  // const [, setPostId] = useAtom(postId)
+  const setPostId = useSetAtom(postId)
+  ```
+  This optimization is important for performance in large applications.
+</Note>
+
+## Component Re-renders
+
+`useAtom` subscribes your component to the atom. The component will re-render whenever:
+- The atom's value changes
+- Any atoms that the atom depends on change (for derived atoms)
+
+```tsx
+const countAtom = atom(0)
+const doubleAtom = atom((get) => get(countAtom) * 2)
+
+function Display() {
+  const [double] = useAtom(doubleAtom)
+  console.log('Display rendered')
+  return <p>{double}</p>
+}
+
+function Controls() {
+  const [, setCount] = useAtom(countAtom)
+  // This component won't re-render when countAtom changes
+  return <button onClick={() => setCount(c => c + 1)}>+</button>
+}
+```
+
+## Best Practices
+
+<Tip>
+  Split `useAtom` into `useAtomValue` and `useSetAtom` when you only need one or the other. This prevents unnecessary re-renders.
+</Tip>
+
+<Tip>
+  Use TypeScript to get full type inference for setter arguments in custom writable atoms.
+</Tip>
+
+<Warning>
+  Don't destructure atoms before passing them to hooks:
+  ```tsx
+  // ❌ Bad
+  const { value, setValue } = useAtom(atom)
+  
+  // ✅ Good
+  const [value, setValue] = useAtom(atom)
+  ```
+</Warning>
+
+## Examples
+
+### Form Input
+
+```tsx
+import { atom, useAtom } from 'jotai'
+
+const nameAtom = atom('')
+const emailAtom = atom('')
+
+function Form() {
+  const [name, setName] = useAtom(nameAtom)
+  const [email, setEmail] = useAtom(emailAtom)
+  
+  return (
+    <form>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Name"
+      />
+      <input
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+        type="email"
+      />
+    </form>
+  )
+}
+```
+
+### Toggle
+
+```tsx
+import { atom, useAtom } from 'jotai'
+
+const isDarkModeAtom = atom(false)
+const toggleDarkModeAtom = atom(
+  (get) => get(isDarkModeAtom),
+  (get, set) => set(isDarkModeAtom, !get(isDarkModeAtom))
+)
+
+function ThemeToggle() {
+  const [isDark, toggle] = useAtom(toggleDarkModeAtom)
+  
+  return (
+    <button onClick={toggle}>
+      {isDark ? '🌙 Dark' : '☀️ Light'}
+    </button>
+  )
+}
+```
+
+### Counter with Min/Max
+
+```tsx
+import { atom, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+const MIN = 0
+const MAX = 10
+
+const boundedCountAtom = atom(
+  (get) => get(countAtom),
+  (get, set, newValue: number) => {
+    set(countAtom, Math.max(MIN, Math.min(MAX, newValue)))
+  }
+)
+
+function BoundedCounter() {
+  const [count, setCount] = useAtom(boundedCountAtom)
+  
+  return (
+    <div>
+      <p>{count}</p>
+      <button onClick={() => setCount(count - 1)}>-</button>
+      <button onClick={() => setCount(count + 1)}>+</button>
+    </div>
+  )
+}
+```
+
+### Shopping Cart
+
+```tsx
+import { atom, useAtom } from 'jotai'
+
+type CartItem = { id: number; name: string; quantity: number }
+
+const cartAtom = atom<CartItem[]>([])
+
+const addToCartAtom = atom(
+  null,
+  (get, set, item: Omit<CartItem, 'quantity'>) => {
+    const cart = get(cartAtom)
+    const existing = cart.find(i => i.id === item.id)
+    
+    if (existing) {
+      set(cartAtom, cart.map(i =>
+        i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+      ))
+    } else {
+      set(cartAtom, [...cart, { ...item, quantity: 1 }])
+    }
+  }
+)
+
+function AddToCart({ product }) {
+  const [, addToCart] = useAtom(addToCartAtom)
+  
+  return (
+    <button onClick={() => addToCart(product)}>
+      Add to Cart
+    </button>
+  )
+}
+
+function Cart() {
+  const [cart] = useAtom(cartAtom)
+  
+  return (
+    <div>
+      {cart.map(item => (
+        <div key={item.id}>
+          {item.name} x {item.quantity}
+        </div>
+      ))}
+    </div>
+  )
+}
+```

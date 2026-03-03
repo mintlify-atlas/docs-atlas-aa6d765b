@@ -1,0 +1,357 @@
+---
+title: Debugging Tools
+description: Tools and techniques for debugging Jotai atoms
+---
+
+Jotai provides powerful debugging tools that integrate with both React DevTools and Redux DevTools. This guide covers debugging strategies and tools.
+
+## Debug Labels
+
+Debug labels help identify atoms in DevTools.
+
+### Manual Debug Labels
+
+```js
+import { atom } from 'jotai'
+
+const countAtom = atom(0)
+
+if (process.env.NODE_ENV !== 'production') {
+  countAtom.debugLabel = 'count'
+}
+```
+
+### Automatic Debug Labels
+
+Use Babel or SWC plugins to automatically add debug labels:
+
+<Steps>
+  <Step title="Install plugin">
+    ```bash
+    npm install --save-dev jotai-babel
+    ```
+  </Step>
+
+  <Step title="Configure Babel">
+    ```js
+    // babel.config.js
+    module.exports = {
+      plugins: ['jotai-babel/plugin-debug-label']
+    }
+    ```
+  </Step>
+
+  <Step title="Or configure SWC">
+    ```js
+    // .swcrc
+    {
+      "jsc": {
+        "experimental": {
+          "plugins": [['@swc-jotai/debug-label', {}]]
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+The plugin automatically transforms:
+
+```js
+// You write:
+const countAtom = atom(0)
+
+// Plugin adds:
+const countAtom = atom(0)
+countAtom.debugLabel = 'countAtom'
+```
+
+## React DevTools
+
+Inspect atoms using React DevTools.
+
+### useAtom Hook Inspection
+
+Select a component using Jotai atoms in React DevTools. You'll see "Atom" hooks with their current values:
+
+```tsx
+function Counter() {
+  const [count] = useAtom(countAtom) // Shows "Atom: count = 0"
+  const [double] = useAtom(doubleAtom) // Shows "Atom: double = 0"
+}
+```
+
+### useAtomsDebugValue
+
+See all atoms in the component tree:
+
+```tsx
+import { useAtomsDebugValue } from 'jotai-devtools/utils'
+import { Provider } from 'jotai'
+
+function DebugAtoms() {
+  useAtomsDebugValue()
+  return null
+}
+
+function App() {
+  return (
+    <Provider>
+      <DebugAtoms />
+      <YourApp />
+    </Provider>
+  )
+}
+```
+
+In React DevTools, navigate to the `DebugAtoms` component to see all atom values and their dependents.
+
+## Redux DevTools
+
+Use Redux DevTools for advanced debugging features.
+
+### useAtomDevtools
+
+Debug a specific atom:
+
+```tsx
+import { useAtomDevtools } from 'jotai-devtools/utils'
+import { useAtom, atom } from 'jotai'
+
+const countAtom = atom(0)
+countAtom.debugLabel = 'count'
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  
+  // Attach to Redux DevTools
+  useAtomDevtools(countAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(c => c + 1)}>Increment</button>
+    </div>
+  )
+}
+```
+
+### useAtomsDevtools
+
+Debug all atoms in the store:
+
+```tsx
+import { useAtomsDevtools } from 'jotai-devtools/utils'
+import { Provider } from 'jotai'
+
+function DebugAtoms() {
+  useAtomsDevtools('demo')
+  return null
+}
+
+function App() {
+  return (
+    <Provider>
+      <DebugAtoms />
+      <YourApp />
+    </Provider>
+  )
+}
+```
+
+Redux DevTools will show:
+
+```json
+{
+  "values": {
+    "atom1:count": 0,
+    "atom2:doubleCount": 0,
+    "atom3:half": 0
+  },
+  "dependents": {
+    "atom1:count": ["atom2:doubleCount"],
+    "atom2:doubleCount": ["atom3:half"],
+    "atom3:half": []
+  }
+}
+```
+
+## Redux DevTools Features
+
+### Time Travel
+
+Jump to any previous state:
+
+1. Open Redux DevTools
+2. Click on any action in the history
+3. Hover over an action
+4. Click "Jump" to restore that state
+
+### Pause Recording
+
+Pause state recording:
+
+1. Open Redux DevTools
+2. Click the pause button
+3. Changes won't be recorded until you resume
+
+### Dispatch Actions
+
+Manually set atom values:
+
+1. Open Redux DevTools
+2. Click "Show Dispatcher"
+3. Enter new value (will be parsed with `JSON.parse`)
+4. Click "Dispatch"
+
+Example:
+
+```json
+5
+```
+
+This sets the atom value to `5`.
+
+<Note>
+Values must be valid JSON. Complex values like functions cannot be dispatched.
+</Note>
+
+## Frozen Atoms
+
+Prevent accidental mutations with `freezeAtom`:
+
+### freezeAtom
+
+```tsx
+import { atom } from 'jotai'
+import { freezeAtom } from 'jotai/utils'
+
+const objAtom = freezeAtom(atom({ count: 0, name: 'test' }))
+
+function Component() {
+  const [obj, setObj] = useAtom(objAtom)
+  
+  // This will throw an error in development
+  obj.count = 1 // Error: Cannot assign to read only property
+  
+  // Correct way: create new object
+  setObj({ ...obj, count: 1 })
+}
+```
+
+### freezeAtomCreator
+
+Create a factory for frozen atoms:
+
+```tsx
+import { atom } from 'jotai'
+import { freezeAtomCreator } from 'jotai/utils'
+
+const freezeAtom = freezeAtomCreator(atom)
+
+const userAtom = freezeAtom({ id: '1', name: 'John' })
+const settingsAtom = freezeAtom({ theme: 'dark' })
+
+// All atoms are frozen
+```
+
+## Logging Atom Changes
+
+Log atom changes for debugging:
+
+```tsx
+import { atom, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+const countAtomWithLog = atom(
+  (get) => get(countAtom),
+  (get, set, newValue) => {
+    console.log('Count changed from', get(countAtom), 'to', newValue)
+    set(countAtom, newValue)
+  }
+)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtomWithLog)
+  // Every change is logged
+}
+```
+
+## Visual Debugger
+
+Use the Jotai DevTools package for a visual debugger:
+
+```bash
+npm install jotai-devtools
+```
+
+```tsx
+import { DevTools } from 'jotai-devtools'
+import 'jotai-devtools/styles.css'
+
+function App() {
+  return (
+    <>
+      <DevTools />
+      <YourApp />
+    </>
+  )
+}
+```
+
+This provides:
+- Visual atom graph
+- Atom value inspector
+- Time travel debugging
+- Atom dependency visualization
+
+## Debugging Async Atoms
+
+Debug async atoms with loading and error states:
+
+```tsx
+import { atom, useAtom } from 'jotai'
+import { loadable } from 'jotai/utils'
+
+const asyncAtom = atom(async () => {
+  const res = await fetch('/api/data')
+  return res.json()
+})
+
+const loadableAtom = loadable(asyncAtom)
+
+function Component() {
+  const [loadable] = useAtom(loadableAtom)
+  
+  console.log('State:', loadable.state) // 'loading' | 'hasData' | 'hasError'
+  
+  if (loadable.state === 'loading') {
+    console.log('Loading...')
+  }
+  if (loadable.state === 'hasData') {
+    console.log('Data:', loadable.data)
+  }
+  if (loadable.state === 'hasError') {
+    console.error('Error:', loadable.error)
+  }
+}
+```
+
+## Tips
+
+<Tip>
+Use debug labels in production too. They help debug production issues without impacting performance.
+</Tip>
+
+<Tip>
+Combine React DevTools for quick inspection and Redux DevTools for advanced debugging like time travel.
+</Tip>
+
+<Tip>
+Use `freezeAtom` during development to catch accidental mutations early.
+</Tip>
+
+<Note>
+`useAtomsDevtools` shows atom dependencies, helping you understand your atom graph and optimize re-renders.
+</Note>

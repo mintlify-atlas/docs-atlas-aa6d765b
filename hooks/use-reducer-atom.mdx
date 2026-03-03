@@ -1,0 +1,246 @@
+---
+title: useReducerAtom
+description: Use reducer pattern with atoms (deprecated)
+---
+
+`useReducerAtom` is a utility hook that implements a Redux-style reducer pattern with Jotai atoms.
+
+<Warning>
+  This hook is **deprecated** and will be removed in a future version. Please use the [recipe approach](https://github.com/pmndrs/jotai/pull/2467) instead.
+</Warning>
+
+## When to use it
+
+This hook was designed for complex state updates using the reducer pattern. However, it's recommended to create your own implementation using the recipe pattern instead.
+
+## Signature
+
+```ts
+function useReducerAtom<Value, Action>(
+  anAtom: PrimitiveAtom<Value>,
+  reducer: (v: Value, a: Action) => Value,
+  options?: Options
+): [Value, (action: Action) => void]
+```
+
+### Parameters
+
+- `anAtom`: A primitive atom to manage with a reducer
+- `reducer`: A function that takes the current value and an action, returning the new value
+- `options`: Optional configuration object
+  - `store`: Custom store to use (defaults to the store from Provider)
+
+### Returns
+
+A tuple containing:
+1. The current state value
+2. A dispatch function to send actions
+
+## Basic Usage (Deprecated)
+
+```tsx
+import { atom } from 'jotai'
+import { useReducerAtom } from 'jotai/react/utils'
+
+type Action =
+  | { type: 'increment' }
+  | { type: 'decrement' }
+  | { type: 'set'; value: number }
+
+const countAtom = atom(0)
+
+function reducer(state: number, action: Action) {
+  switch (action.type) {
+    case 'increment':
+      return state + 1
+    case 'decrement':
+      return state - 1
+    case 'set':
+      return action.value
+    default:
+      return state
+  }
+}
+
+function Counter() {
+  const [count, dispatch] = useReducerAtom(countAtom, reducer)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => dispatch({ type: 'increment' })}>
+        +
+      </button>
+      <button onClick={() => dispatch({ type: 'decrement' })}>
+        -
+      </button>
+    </div>
+  )
+}
+```
+
+## Recommended Alternative: Recipe Pattern
+
+Instead of using `useReducerAtom`, create a custom atom with built-in actions:
+
+```tsx
+import { atom, useAtom } from 'jotai'
+
+type Action =
+  | { type: 'increment' }
+  | { type: 'decrement' }
+  | { type: 'set'; value: number }
+
+function reducer(state: number, action: Action) {
+  switch (action.type) {
+    case 'increment':
+      return state + 1
+    case 'decrement':
+      return state - 1
+    case 'set':
+      return action.value
+    default:
+      return state
+  }
+}
+
+const countAtom = atom(0)
+
+const countReducerAtom = atom(
+  (get) => get(countAtom),
+  (get, set, action: Action) => {
+    set(countAtom, reducer(get(countAtom), action))
+  }
+)
+
+function Counter() {
+  const [count, dispatch] = useAtom(countReducerAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => dispatch({ type: 'increment' })}>
+        +
+      </button>
+      <button onClick={() => dispatch({ type: 'decrement' })}>
+        -
+      </button>
+    </div>
+  )
+}
+```
+
+## Alternative: Action Atoms
+
+For even better separation of concerns, create individual action atoms:
+
+```tsx
+import { atom, useAtom, useSetAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+const incrementAtom = atom(
+  null,
+  (get, set) => set(countAtom, get(countAtom) + 1)
+)
+
+const decrementAtom = atom(
+  null,
+  (get, set) => set(countAtom, get(countAtom) - 1)
+)
+
+const setCountAtom = atom(
+  null,
+  (get, set, value: number) => set(countAtom, value)
+)
+
+function Counter() {
+  const [count] = useAtom(countAtom)
+  const increment = useSetAtom(incrementAtom)
+  const decrement = useSetAtom(decrementAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={increment}>+</button>
+      <button onClick={decrement}>-</button>
+    </div>
+  )
+}
+```
+
+## Complex State Example (Recipe Pattern)
+
+```tsx
+import { atom, useAtom } from 'jotai'
+
+interface Todo {
+  id: number
+  text: string
+  completed: boolean
+}
+
+type TodoAction =
+  | { type: 'add'; text: string }
+  | { type: 'toggle'; id: number }
+  | { type: 'delete'; id: number }
+
+function todoReducer(todos: Todo[], action: TodoAction): Todo[] {
+  switch (action.type) {
+    case 'add':
+      return [...todos, { id: Date.now(), text: action.text, completed: false }]
+    case 'toggle':
+      return todos.map(todo =>
+        todo.id === action.id ? { ...todo, completed: !todo.completed } : todo
+      )
+    case 'delete':
+      return todos.filter(todo => todo.id !== action.id)
+    default:
+      return todos
+  }
+}
+
+const todosAtom = atom<Todo[]>([])
+
+const todosReducerAtom = atom(
+  (get) => get(todosAtom),
+  (get, set, action: TodoAction) => {
+    set(todosAtom, todoReducer(get(todosAtom), action))
+  }
+)
+
+function TodoList() {
+  const [todos, dispatch] = useAtom(todosReducerAtom)
+  
+  return (
+    <div>
+      <button onClick={() => dispatch({ type: 'add', text: 'New todo' })}>
+        Add Todo
+      </button>
+      {todos.map(todo => (
+        <div key={todo.id}>
+          <span
+            onClick={() => dispatch({ type: 'toggle', id: todo.id })}
+            style={{ textDecoration: todo.completed ? 'line-through' : 'none' }}
+          >
+            {todo.text}
+          </span>
+          <button onClick={() => dispatch({ type: 'delete', id: todo.id })}>
+            Delete
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+## Migration Guide
+
+If you're using `useReducerAtom`, migrate by:
+
+1. Create a writable atom that handles actions in its write function
+2. Replace `useReducerAtom` with `useAtom`
+3. The API remains the same: `[state, dispatch]`
+
+This gives you better type safety, more flexibility, and removes the deprecation warning.

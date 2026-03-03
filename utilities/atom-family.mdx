@@ -1,0 +1,224 @@
+---
+title: atomFamily
+description: Create a family of atoms with parameter-based memoization
+---
+
+<Warning>
+  **Deprecated**: `atomFamily` is deprecated and will be removed in v3. Please use the [`jotai-family`](https://github.com/jotaijs/jotai-family) package instead.
+  
+  ```bash
+  npm install jotai-family
+  ```
+  
+  Migration:
+  ```ts
+  // Before
+  import { atomFamily } from 'jotai/utils'
+  
+  // After
+  import { atomFamily } from 'jotai-family'
+  ```
+</Warning>
+
+`atomFamily` creates a family of atoms where each atom is memoized based on a parameter. This is useful for creating dynamic collections of atoms.
+
+## Signature
+
+```ts
+function atomFamily<Param, AtomType extends Atom<unknown>>(
+  initializeAtom: (param: Param) => AtomType,
+  areEqual?: (a: Param, b: Param) => boolean
+): AtomFamily<Param, AtomType>
+
+interface AtomFamily<Param, AtomType> {
+  (param: Param): AtomType
+  getParams(): Iterable<Param>
+  remove(param: Param): void
+  setShouldRemove(shouldRemove: ShouldRemove<Param> | null): void
+  unstable_listen(callback: Callback<Param, AtomType>): Cleanup
+}
+```
+
+<ParamField path="initializeAtom" type="(param: Param) => AtomType" required>
+  Function that creates an atom for the given parameter
+</ParamField>
+
+<ParamField path="areEqual" type="(a: Param, b: Param) => boolean">
+  Custom equality function for comparing parameters. Defaults to reference equality
+</ParamField>
+
+## Usage
+
+### Basic atom family
+
+```tsx
+import { atomFamily } from 'jotai/utils'
+import { atom } from 'jotai'
+
+// Create a family of atoms for todo items
+const todoAtomFamily = atomFamily((id: number) => 
+  atom({ id, title: '', completed: false })
+)
+
+function TodoItem({ id }: { id: number }) {
+  const [todo, setTodo] = useAtom(todoAtomFamily(id))
+  
+  return (
+    <div>
+      <input
+        value={todo.title}
+        onChange={(e) => setTodo({ ...todo, title: e.target.value })}
+      />
+      <input
+        type="checkbox"
+        checked={todo.completed}
+        onChange={(e) => setTodo({ ...todo, completed: e.target.checked })}
+      />
+    </div>
+  )
+}
+```
+
+### With custom equality
+
+```tsx
+import { atomFamily } from 'jotai/utils'
+import { atom } from 'jotai'
+
+interface TodoParam {
+  id: number
+  category: string
+}
+
+const todoFamily = atomFamily(
+  (param: TodoParam) => atom({ ...param, title: '' }),
+  (a, b) => a.id === b.id && a.category === b.category
+)
+
+const todoAtom = todoFamily({ id: 1, category: 'work' })
+```
+
+### Removing atoms from family
+
+```tsx
+import { atomFamily } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const todoFamily = atomFamily((id: number) => 
+  atom({ id, title: '' })
+)
+
+function TodoList() {
+  const handleDelete = (id: number) => {
+    // Remove the atom from the family to free memory
+    todoFamily.remove(id)
+  }
+  
+  return (
+    <div>
+      {/* ... */}
+    </div>
+  )
+}
+```
+
+### Auto-cleanup with setShouldRemove
+
+```tsx
+import { atomFamily } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const todoFamily = atomFamily((id: number) => 
+  atom({ id, title: '' })
+)
+
+// Remove atoms that were created more than 5 minutes ago
+todoFamily.setShouldRemove((createdAt, param) => {
+  return Date.now() - createdAt > 5 * 60 * 1000
+})
+
+// To stop auto-cleanup
+todoFamily.setShouldRemove(null)
+```
+
+### Iterating over parameters
+
+```tsx
+import { atomFamily } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const todoFamily = atomFamily((id: number) => 
+  atom({ id, title: '' })
+)
+
+function TodoList() {
+  const params = Array.from(todoFamily.getParams())
+  
+  return (
+    <div>
+      {params.map(id => (
+        <TodoItem key={id} id={id} />
+      ))}
+    </div>
+  )
+}
+```
+
+## Methods
+
+### `atomFamily(param)`
+
+Returns the memoized atom for the given parameter. If an atom doesn't exist, it creates one.
+
+### `getParams()`
+
+Returns an iterable of all parameters that have atoms created.
+
+### `remove(param)`
+
+Removes the atom associated with the parameter from the family.
+
+### `setShouldRemove(shouldRemove)`
+
+Sets a function that determines whether atoms should be automatically removed. The function receives:
+- `createdAt`: timestamp (in milliseconds) when the atom was created
+- `param`: the parameter of the atom
+
+Returns `true` to remove the atom.
+
+### `unstable_listen(callback)`
+
+<Warning>
+  This API is for advanced use cases and can change without notice.
+</Warning>
+
+Listens to atom creation and removal events. Returns a cleanup function.
+
+```ts
+const cleanup = todoFamily.unstable_listen(({ type, param, atom }) => {
+  console.log(`Atom ${type === 'CREATE' ? 'created' : 'removed'} for param:`, param)
+})
+
+// Stop listening
+cleanup()
+```
+
+## Migration to jotai-family
+
+To migrate to the new `jotai-family` package:
+
+1. Install the package:
+```bash
+npm install jotai-family
+```
+
+2. Update imports:
+```ts
+// Before
+import { atomFamily } from 'jotai/utils'
+
+// After
+import { atomFamily } from 'jotai-family'
+```
+
+The API remains the same.

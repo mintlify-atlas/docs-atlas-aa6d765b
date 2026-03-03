@@ -1,0 +1,139 @@
+---
+title: Showcase
+description: Real-world examples and projects using Jotai
+---
+
+Explore real-world examples and projects built with Jotai to see how it can be used in different scenarios.
+
+## Official Examples
+
+### Text Length Counter
+
+[![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?style=flat-square&logo=codesandbox)](https://githubbox.com/pmndrs/jotai/tree/main/examples/text_length)
+
+A simple example that demonstrates deriving state in Jotai. Count the length and show the uppercase of any text.
+
+**Key Concepts:**
+- Derived atoms
+- Basic state management
+- Atom composition
+
+### Hacker News Reader
+
+[![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?style=flat-square&logo=codesandbox)](https://githubbox.com/pmndrs/jotai/tree/main/examples/hacker_news)
+
+A news article reader that fetches and displays Hacker News articles. Hit next to see more articles.
+
+**Key Concepts:**
+- Async data fetching
+- State transitions
+- Loading states
+
+### Todo Application
+
+[![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?style=flat-square&logo=codesandbox)](https://githubbox.com/pmndrs/jotai/tree/main/examples/todos)
+
+A classic todo list application. Record your todo list by typing them into the app, check them off when completed, and switch between "Completed" and "Incomplete" to filter tasks.
+
+**Key Concepts:**
+- Managing lists of items
+- Filtering derived state
+- User interactions
+
+### Todo with atomFamily & localStorage
+
+[![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?style=flat-square&logo=codesandbox)](https://githubbox.com/pmndrs/jotai/tree/main/examples/todos_with_atomFamily)
+
+An advanced todo list implementation using `atomFamily` for dynamic atom creation and localStorage for persistence. Save your todo list to localStorage and restore it later.
+
+**Key Concepts:**
+- `atomFamily` for dynamic atoms
+- `atomWithStorage` for persistence
+- Advanced state patterns
+
+### Clock with Next.js
+
+[![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?style=flat-square&logo=codesandbox)](https://codesandbox.io/s/nextjs-with-jotai-5ylrj)
+
+A UTC time electronic clock implementation using Next.js and Jotai, demonstrating SSR compatibility.
+
+**Key Concepts:**
+- Next.js integration
+- Server-side rendering
+- Time-based state updates
+
+### Tic Tac Toe Game
+
+[![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?style=flat-square&logo=codesandbox)](https://codesandbox.io/s/jotai-tic-tac-6cg3h)
+
+A classic game of tic-tac-toe implemented with Jotai, showing how to manage game state and logic.
+
+**Key Concepts:**
+- Game state management
+- Turn-based logic
+- Win condition checking
+
+### React Three Fiber Demo
+
+[![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?style=flat-square&logo=codesandbox)](https://codesandbox.io/s/jotai-r3f-fri9d)
+
+A 3D visualization demo using Jotai with react-three-fiber, showing how Jotai works with WebGL and 3D graphics.
+
+**Key Concepts:**
+- Integration with react-three-fiber
+- 3D state management
+- Animation state
+
+## Community Projects
+
+Here are some real-world projects and companies using Jotai:
+
+### Production Applications
+
+Many companies and developers use Jotai in production applications for:
+
+- E-commerce platforms
+- Dashboard applications
+- Data visualization tools
+- Mobile-first web applications
+- Real-time collaboration tools
+- Gaming interfaces
+
+### Open Source Projects
+
+Jotai is used in various open source projects across the React ecosystem. Check out the [GitHub topic](https://github.com/topics/jotai) to discover more projects using Jotai.
+
+## Use Case Patterns
+
+### Form State Management
+
+Jotai excels at managing complex form state with field-level subscriptions, reducing unnecessary re-renders.
+
+### Global UI State
+
+Manage modals, toasts, theme settings, and other UI state without prop drilling.
+
+### Data Fetching
+
+Combine with React Suspense for elegant loading states, or use with libraries like `jotai-tanstack-query` for advanced data fetching patterns.
+
+### Real-time Applications
+
+Manage WebSocket connections and real-time data updates with atom subscriptions.
+
+### State Machines
+
+Implement state machines and complex workflows using atom composition.
+
+## Contributing Your Project
+
+Built something cool with Jotai? Share it with the community:
+
+- Open a PR to add your project to the showcase
+- Share on Twitter with #jotai
+- Join the [Discord community](https://discord.gg/poimandres)
+- Write a blog post about your experience
+
+## Learning Resources
+
+Explore these examples hands-on to learn Jotai patterns and best practices. Each example is interactive and can be forked to experiment with the code.

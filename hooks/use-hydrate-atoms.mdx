@@ -1,0 +1,332 @@
+---
+title: useHydrateAtoms
+description: Initialize atom values during SSR or hydration
+---
+
+`useHydrateAtoms` is a hook that initializes atom values, primarily used for server-side rendering (SSR) and hydration scenarios. It ensures atoms have specific values when components mount.
+
+## When to use it
+
+Use `useHydrateAtoms` when you need to:
+- Initialize atoms with server-side data during SSR
+- Hydrate atoms with initial values from props
+- Set up initial state for isolated component trees
+- Populate atoms with data from external sources on mount
+
+## Signature
+
+```ts
+function useHydrateAtoms(
+  values: Iterable<readonly [AnyWritableAtom, ...unknown[]]>,
+  options?: Options
+): void
+```
+
+### Parameters
+
+- `values`: An iterable of `[atom, value]` tuples or `[atom, ...args]` for atoms with write arguments
+  - Can be an array: `[[atom1, value1], [atom2, value2]]`
+  - Can be a Map: `new Map([[atom1, value1], [atom2, value2]])`
+- `options`: Optional configuration object
+  - `store`: Custom store to use (defaults to the store from Provider)
+  - `dangerouslyForceHydrate`: Force re-hydration even if already hydrated (use with caution)
+
+### Returns
+
+Nothing (`void`). This hook only has side effects.
+
+## Basic Usage
+
+```tsx
+import { atom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/react/utils'
+
+const countAtom = atom(0)
+const nameAtom = atom('Guest')
+
+function Component({ initialCount, initialName }) {
+  useHydrateAtoms([
+    [countAtom, initialCount],
+    [nameAtom, initialName]
+  ])
+  
+  const [count] = useAtom(countAtom)
+  const [name] = useAtom(nameAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <p>Name: {name}</p>
+    </div>
+  )
+}
+```
+
+## SSR Example
+
+```tsx
+import { atom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/react/utils'
+
+const userAtom = atom<User | null>(null)
+const postsAtom = atom<Post[]>([])
+
+function Page({ user, posts }) {
+  // Hydrate atoms with server-rendered data
+  useHydrateAtoms([
+    [userAtom, user],
+    [postsAtom, posts]
+  ])
+  
+  return (
+    <div>
+      <UserProfile />
+      <PostList />
+    </div>
+  )
+}
+
+// Server-side
+export async function getServerSideProps() {
+  const user = await fetchUser()
+  const posts = await fetchPosts()
+  
+  return {
+    props: { user, posts }
+  }
+}
+```
+
+## With Next.js App Router
+
+```tsx
+import { atom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/react/utils'
+
+const dataAtom = atom<Data | null>(null)
+
+function HydrateAtoms({ initialData, children }) {
+  useHydrateAtoms([[dataAtom, initialData]])
+  return children
+}
+
+export default async function Page() {
+  const data = await fetchData()
+  
+  return (
+    <HydrateAtoms initialData={data}>
+      <Content />
+    </HydrateAtoms>
+  )
+}
+```
+
+## Using Map for Values
+
+```tsx
+import { atom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/react/utils'
+
+const atom1 = atom(0)
+const atom2 = atom('')
+
+function Component({ values }) {
+  const atomValues = new Map([
+    [atom1, values.count],
+    [atom2, values.name]
+  ])
+  
+  useHydrateAtoms(atomValues)
+  
+  // Component logic
+}
+```
+
+## Hydration Only Happens Once
+
+By default, atoms are only hydrated once per store:
+
+```tsx
+function Component({ value }) {
+  // First render: atom is set to value
+  // Re-renders with different value: atom keeps its current value
+  useHydrateAtoms([[myAtom, value]])
+}
+```
+
+This prevents props from overwriting user interactions.
+
+## Force Re-hydration
+
+Use `dangerouslyForceHydrate` to re-hydrate on every render:
+
+```tsx
+function Component({ value }) {
+  // Atom will be updated on every render
+  // WARNING: This can cause issues with user state
+  useHydrateAtoms(
+    [[myAtom, value]],
+    { dangerouslyForceHydrate: true }
+  )
+}
+```
+
+<Warning>
+  `dangerouslyForceHydrate` can overwrite user changes. Only use it when you're certain atoms should always reflect props.
+</Warning>
+
+## Isolated Component Trees
+
+```tsx
+import { createStore } from 'jotai'
+import { useHydrateAtoms } from 'jotai/react/utils'
+import { Provider } from 'jotai/react'
+
+const configAtom = atom<Config | null>(null)
+
+function IsolatedApp({ config }) {
+  const store = createStore()
+  
+  return (
+    <Provider store={store}>
+      <Hydrate config={config}>
+        <App />
+      </Hydrate>
+    </Provider>
+  )
+}
+
+function Hydrate({ config, children }) {
+  useHydrateAtoms([[configAtom, config]])
+  return children
+}
+```
+
+## With atomWithStorage
+
+```tsx
+import { atomWithStorage } from 'jotai/utils'
+import { useHydrateAtoms } from 'jotai/react/utils'
+
+const themeAtom = atomWithStorage('theme', 'light')
+
+function App({ serverTheme }) {
+  // Hydrate with server-detected theme
+  useHydrateAtoms([[themeAtom, serverTheme]])
+  
+  const [theme, setTheme] = useAtom(themeAtom)
+  
+  return <div className={theme}>{/* app content */}</div>
+}
+```
+
+## Multiple Initialization Values
+
+```tsx
+import { atom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/react/utils'
+
+const userAtom = atom<User | null>(null)
+const settingsAtom = atom<Settings>(defaultSettings)
+const itemsAtom = atom<Item[]>([])
+
+function Dashboard({ initialData }) {
+  useHydrateAtoms([
+    [userAtom, initialData.user],
+    [settingsAtom, initialData.settings],
+    [itemsAtom, initialData.items]
+  ])
+  
+  return (
+    <div>
+      <UserProfile />
+      <Settings />
+      <ItemList />
+    </div>
+  )
+}
+```
+
+## Pattern: Hydration Component
+
+Create a reusable hydration wrapper:
+
+```tsx
+import { useHydrateAtoms } from 'jotai/react/utils'
+
+function HydrateAtoms({ initialValues, children }) {
+  useHydrateAtoms(initialValues)
+  return children
+}
+
+function Page({ serverData }) {
+  return (
+    <HydrateAtoms initialValues={[
+      [userAtom, serverData.user],
+      [postsAtom, serverData.posts]
+    ]}>
+      <PageContent />
+    </HydrateAtoms>
+  )
+}
+```
+
+## TypeScript
+
+`useHydrateAtoms` is fully typed and enforces correct value types:
+
+```tsx
+import { atom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/react/utils'
+
+const numberAtom = atom(0)
+const stringAtom = atom('')
+
+function Component() {
+  useHydrateAtoms([
+    [numberAtom, 42],        // OK
+    [stringAtom, 'hello'],   // OK
+    [numberAtom, 'invalid'], // Error: string not assignable to number
+  ])
+}
+```
+
+## Common Patterns
+
+### Pattern 1: SSR with Suspense
+
+```tsx
+import { Suspense } from 'react'
+
+function Page({ initialData }) {
+  return (
+    <HydrateAtoms initialValues={[[dataAtom, initialData]]}>
+      <Suspense fallback={<Loading />}>
+        <AsyncComponent />
+      </Suspense>
+    </HydrateAtoms>
+  )
+}
+```
+
+### Pattern 2: Conditional Hydration
+
+```tsx
+function Component({ data }) {
+  const values = data ? [[myAtom, data]] : []
+  useHydrateAtoms(values)
+}
+```
+
+### Pattern 3: Dynamic Atom Hydration
+
+```tsx
+function Component({ items }) {
+  const atomValues = items.map(item => [
+    getAtomForItem(item.id),
+    item.value
+  ])
+  
+  useHydrateAtoms(atomValues)
+}
+```

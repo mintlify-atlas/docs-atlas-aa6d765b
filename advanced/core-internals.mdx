@@ -1,0 +1,312 @@
+---
+title: Core Internals
+description: Understanding how Jotai works under the hood
+---
+
+This guide explores the internal implementation of Jotai to help you understand how atoms, stores, and state management work at a fundamental level.
+
+<Warning>
+The internal implementation is subject to change without notice. If you rely on internal APIs in production code, pin your Jotai version.
+</Warning>
+
+## When to Read This
+
+You should explore Jotai's internals when:
+- You want to understand performance characteristics
+- You're debugging complex state issues
+- You're building advanced patterns or libraries on top of Jotai
+- You're contributing to the Jotai codebase
+
+## Core Concepts
+
+### Atom Configs vs Atom Values
+
+An important distinction in Jotai is that `atom()` doesn't create state—it creates a **configuration object**:
+
+```js
+const countAtom = atom(0) // This is just a config, not state!
+```
+
+The atom config is identified by **referential equality**—it doesn't have a string key. The actual state lives in a **store**, which maps atom configs to their values using a `WeakMap`.
+
+### WeakMap for Memory Management
+
+Jotai uses `WeakMap` to avoid memory leaks. When an atom config is no longer referenced, it can be garbage collected along with its state:
+
+```js
+const atomStateMap = new WeakMap()
+// When atom config is GC'd, its state is too
+```
+
+## Simple Implementation
+
+Here's a simplified version of how Jotai works internally.
+
+### Version 1: Primitive Atoms
+
+```js
+import { useState, useEffect } from 'react'
+
+// atom() returns a config object
+export const atom = (initialValue) => ({ init: initialValue })
+
+// WeakMap tracks atom state
+const atomStateMap = new WeakMap()
+
+const getAtomState = (atom) => {
+  let atomState = atomStateMap.get(atom)
+  if (!atomState) {
+    atomState = { 
+      value: atom.init, 
+      listeners: new Set() 
+    }
+    atomStateMap.set(atom, atomState)
+  }
+  return atomState
+}
+
+export const useAtom = (atom) => {
+  const atomState = getAtomState(atom)
+  const [value, setValue] = useState(atomState.value)
+  
+  useEffect(() => {
+    const callback = () => setValue(atomState.value)
+    
+    // Subscribe to changes
+    atomState.listeners.add(callback)
+    callback()
+    
+    return () => atomState.listeners.delete(callback)
+  }, [atomState])
+  
+  const setAtom = (nextValue) => {
+    atomState.value = nextValue
+    // Notify all subscribers
+    atomState.listeners.forEach((l) => l())
+  }
+  
+  return [value, setAtom]
+}
+```
+
+### Version 2: Derived Atoms
+
+Derived atoms depend on other atoms and need **dependency tracking**:
+
+```js
+// Atoms can now have read/write functions
+export const atom = (read, write) => {
+  if (typeof read === 'function') {
+    return { read, write }
+  }
+  
+  const config = {
+    init: read,
+    read: (get) => get(config),
+    write: write || ((get, set, arg) => {
+      set(config, typeof arg === 'function' ? arg(get(config)) : arg)
+    })
+  }
+  return config
+}
+
+// Track dependents for each atom
+const atomStateMap = new WeakMap()
+const getAtomState = (atom) => {
+  let atomState = atomStateMap.get(atom)
+  if (!atomState) {
+    atomState = {
+      value: atom.init,
+      listeners: new Set(),
+      dependents: new Set() // Track atoms that depend on this one
+    }
+    atomStateMap.set(atom, atomState)
+  }
+  return atomState
+}
+
+// Read atom and track dependencies
+const readAtom = (atom) => {
+  const atomState = getAtomState(atom)
+  
+  const get = (a) => {
+    if (a === atom) {
+      return atomState.value
+    }
+    const aState = getAtomState(a)
+    aState.dependents.add(atom) // Track dependency
+    return readAtom(a)
+  }
+  
+  const value = atom.read(get)
+  atomState.value = value
+  return value
+}
+
+// Notify dependents recursively
+const notify = (atom) => {
+  const atomState = getAtomState(atom)
+  atomState.dependents.forEach((d) => {
+    if (d !== atom) notify(d)
+  })
+  atomState.listeners.forEach((l) => l())
+}
+
+// Write atom and notify dependents
+const writeAtom = (atom, value) => {
+  const atomState = getAtomState(atom)
+  
+  const get = (a) => getAtomState(a).value
+  const set = (a, v) => {
+    if (a === atom) {
+      atomState.value = v
+      notify(atom)
+      return
+    }
+    writeAtom(a, v)
+  }
+  
+  atom.write(get, set, value)
+}
+```
+
+## Real Implementation Details
+
+The actual Jotai implementation is more sophisticated:
+
+### Atom State Structure
+
+```ts
+type AtomState<Value> = {
+  // Dependencies: Map of atoms to their epoch numbers
+  readonly d: Map<AnyAtom, EpochNumber>
+  // Pending promises that depend on this atom
+  readonly p: Set<AnyAtom>
+  // Epoch number (increments on each update)
+  n: EpochNumber
+  // Current value
+  v?: Value
+  // Error if read failed
+  e?: AnyError
+}
+```
+
+### Mounted State
+
+Atoms can be "mounted" when they have subscribers:
+
+```ts
+type Mounted = {
+  // Listeners to notify on change
+  readonly l: Set<() => void>
+  // Mounted dependencies
+  readonly d: Set<AnyAtom>
+  // Mounted dependents
+  readonly t: Set<AnyAtom>
+  // Unmount callback
+  u?: () => void
+}
+```
+
+### Store Structure
+
+A store provides three core methods:
+
+```ts
+type Store = {
+  get: <Value>(atom: Atom<Value>) => Value
+  set: <Value, Args extends unknown[], Result>(
+    atom: WritableAtom<Value, Args, Result>,
+    ...args: Args
+  ) => Result
+  sub: (atom: AnyAtom, listener: () => void) => () => void
+}
+```
+
+## Performance Implications
+
+### Epoch-Based Optimization
+
+Jotai uses epoch numbers to avoid unnecessary recomputations:
+
+```js
+// If dependencies haven't changed epoch, use cached value
+if (mountedMap.has(atom) && invalidatedAtoms.get(atom) !== atomState.n) {
+  return atomState // Return cached
+}
+```
+
+### Topological Sorting
+
+When atoms change, Jotai recomputes dependents in topological order to ensure each atom is computed only once:
+
+```js
+// Build dependency graph and sort
+const topSortedReversed = []
+const visiting = new WeakSet()
+const visited = new WeakSet()
+// ... depth-first traversal
+```
+
+### Lazy Evaluation
+
+Atoms are only computed when:
+1. They're read by a component (mounted)
+2. They're read by another atom being computed
+
+Unmounted atoms don't recompute on dependency changes.
+
+## Memory Considerations
+
+<Warning>
+**Pending Promise Memory**: Atoms with pending promises that depend on other atoms are tracked in the `p` set. This can cause memory retention until promises settle.
+</Warning>
+
+### Garbage Collection
+
+When an atom is no longer referenced:
+
+```js
+// 1. Component unmounts
+// 2. No more listeners
+// 3. No more dependents
+// 4. Atom is unmounted from store
+// 5. WeakMap allows GC of atom and state
+```
+
+## Edge Cases to Know
+
+### Circular Dependencies
+
+Jotai doesn't explicitly check for circular dependencies. The topological sort handles most cases, but infinite loops are possible:
+
+```js
+// Avoid this!
+const atom1 = atom((get) => get(atom2) + 1)
+const atom2 = atom((get) => get(atom1) + 1)
+```
+
+### Synchronous vs Async Updates
+
+Internal state mutations track whether operations are synchronous:
+
+```js
+let isSync = true
+try {
+  // ... perform operation
+} finally {
+  isSync = false
+}
+```
+
+Some operations (like `setSelf`) are only allowed in async context.
+
+## Learn More
+
+- [Store Outside React](/advanced/store-outside-react) - Use store imperatively
+- [Atoms in Atom](/advanced/atoms-in-atom) - Dynamic atom creation
+- Read the source: `/src/vanilla/internals.ts`
+
+<Info>
+For a visual understanding, check out Daishi Kato's [Twitter thread on Jotai internals](https://twitter.com/dai_shi/status/1484835169475653634).
+</Info>

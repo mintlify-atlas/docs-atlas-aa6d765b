@@ -1,0 +1,465 @@
+---
+title: Atoms in Atom
+description: Creating and storing atoms within other atoms for dynamic state
+---
+
+The "atoms in atom" pattern involves storing atom configs as values in other atoms. This enables powerful dynamic state patterns where the state structure itself can change at runtime.
+
+## When to Use This Pattern
+
+Use atoms in atom when:
+- You need dynamically created state (e.g., todo items, form fields)
+- You want to avoid re-rendering unrelated components
+- You're building reusable components with isolated state
+- You need referential equality for React keys
+
+<Warning>
+**Advanced pattern**: This pattern has a learning curve and can make state harder to debug. Use it only when you need its specific benefits.
+</Warning>
+
+## Understanding Atom Configs
+
+First, understand that `atom()` creates a **config object**, not state:
+
+```js
+const countAtom = atom(0)
+// countAtom is just a config object
+// Atoms are identified by referential equality (like object keys)
+```
+
+This means you can:
+- Store atoms in variables
+- Pass atoms as props
+- Store atoms in other atoms
+- Use atoms as Map/Set keys
+
+## Storing Atoms in useState
+
+You can store atom configs in component state:
+
+```jsx
+import { useState } from 'react'
+import { atom, useAtom } from 'jotai'
+
+function DynamicCounter() {
+  // Create an atom on demand
+  const [currentAtom, setCurrentAtom] = useState(() => atom(0))
+  const [count, setCount] = useAtom(currentAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+      <button onClick={() => setCurrentAtom(atom(0))}>
+        Create new counter
+      </button>
+    </div>
+  )
+}
+```
+
+<Info>
+When you create a new atom with `atom(0)`, you're creating a completely separate state. The old atom's state is garbage collected if nothing references it.
+</Info>
+
+## Storing Atoms in Atoms
+
+You can store atom configs as values:
+
+```jsx
+import { atom, useAtom } from 'jotai'
+
+const firstNameAtom = atom('Tanjiro')
+const lastNameAtom = atom('Kamado')
+
+// This atom stores an atom config as its value
+const selectedNameAtom = atom(firstNameAtom)
+
+function NameDisplay() {
+  const [nameAtom, setNameAtom] = useAtom(selectedNameAtom)
+  const [name] = useAtom(nameAtom)
+  
+  return (
+    <div>
+      <p>Name: {name}</p>
+      <button onClick={() => setNameAtom(firstNameAtom)}>
+        Show First Name
+      </button>
+      <button onClick={() => setNameAtom(lastNameAtom)}>
+        Show Last Name
+      </button>
+    </div>
+  )
+}
+```
+
+### Derived Atoms with Double Get
+
+You can create derived atoms that read from dynamic atoms:
+
+```js
+// Read the atom stored in selectedNameAtom, then read that atom's value
+const derivedNameAtom = atom((get) => {
+  const nameAtom = get(selectedNameAtom)
+  return get(nameAtom)
+})
+
+// Shorter version
+const derivedNameAtom = atom((get) => get(get(selectedNameAtom)))
+```
+
+<Info>
+**TypeScript tip**: Use explicit naming to avoid confusion about what's an atom and what's a value. E.g., `nameAtom` vs `name`.
+</Info>
+
+## Array of Atoms Pattern
+
+This is the classic "atoms in atom" pattern—storing an array of atoms:
+
+```jsx
+import { atom, useAtom } from 'jotai'
+
+// Array of atom configs
+const todosAtom = atom([
+  atom({ text: 'Buy milk', done: false }),
+  atom({ text: 'Walk dog', done: false }),
+  atom({ text: 'Write code', done: true })
+])
+
+function TodoItem({ todoAtom }) {
+  const [todo, setTodo] = useAtom(todoAtom)
+  
+  return (
+    <div>
+      <input
+        type="checkbox"
+        checked={todo.done}
+        onChange={(e) => setTodo({ ...todo, done: e.target.checked })}
+      />
+      <span style={{ textDecoration: todo.done ? 'line-through' : 'none' }}>
+        {todo.text}
+      </span>
+    </div>
+  )
+}
+
+function TodoList() {
+  const [todos, setTodos] = useAtom(todosAtom)
+  
+  const addTodo = () => {
+    const newTodoAtom = atom({ text: 'New todo', done: false })
+    setTodos((prev) => [...prev, newTodoAtom])
+  }
+  
+  const removeTodo = (todoAtom) => {
+    setTodos((prev) => prev.filter((atom) => atom !== todoAtom))
+  }
+  
+  return (
+    <div>
+      {todos.map((todoAtom) => (
+        <TodoItem 
+          key={`${todoAtom}`} // atom.toString() returns unique ID
+          todoAtom={todoAtom}
+        />
+      ))}
+      <button onClick={addTodo}>Add Todo</button>
+    </div>
+  )
+}
+```
+
+### Why This Pattern is Powerful
+
+**Performance benefit**: When you update one todo item, only that `TodoItem` re-renders:
+
+```jsx
+// Updating todoAtom[0] only re-renders TodoItem for that atom
+store.set(todoAtom, { text: 'Buy milk', done: true })
+// TodoList and other TodoItems don't re-render!
+```
+
+Without atoms in atom:
+```jsx
+// Traditional approach - entire TodoList re-renders
+const todosAtom = atom([
+  { id: 1, text: 'Buy milk', done: false },
+  { id: 2, text: 'Walk dog', done: false }
+])
+// Updating one todo causes all todo items to re-render
+```
+
+## Map of Atoms Pattern
+
+You can also use objects/maps:
+
+```jsx
+const pricesAtom = atom({
+  apple: atom(15),
+  orange: atom(12),
+  pineapple: atom(25)
+})
+
+function Fruit({ name, priceAtom }) {
+  const [price, setPrice] = useAtom(priceAtom)
+  
+  return (
+    <div>
+      {name}: ${price}
+      <button onClick={() => setPrice((p) => p + 1)}>+</button>
+    </div>
+  )
+}
+
+function PriceList() {
+  const [prices] = useAtom(pricesAtom)
+  
+  return (
+    <div>
+      {Object.keys(prices).map((name) => (
+        <Fruit 
+          key={name}
+          name={name}
+          priceAtom={prices[name]}
+        />
+      ))}
+    </div>
+  )
+}
+```
+
+## Dynamic Creation Patterns
+
+### Creating Atoms On-Demand
+
+```jsx
+import { atom, useAtom } from 'jotai'
+import { atomFamily } from 'jotai/utils'
+
+// Create atoms on demand by ID
+const todoAtomFamily = atomFamily((id) => 
+  atom({ id, text: '', done: false })
+)
+
+function TodoById({ id }) {
+  const [todo] = useAtom(todoAtomFamily(id))
+  return <div>{todo.text}</div>
+}
+```
+
+<Info>
+`atomFamily` from `jotai/utils` is a helper for this pattern. It memoizes atom creation.
+</Info>
+
+### Form Fields
+
+```jsx
+const formFieldsAtom = atom({
+  email: atom(''),
+  password: atom(''),
+  confirmPassword: atom('')
+})
+
+function FormField({ name, fieldAtom }) {
+  const [value, setValue] = useAtom(fieldAtom)
+  
+  return (
+    <input
+      type={name === 'email' ? 'email' : 'password'}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      placeholder={name}
+    />
+  )
+}
+
+function Form() {
+  const [fields] = useAtom(formFieldsAtom)
+  
+  return (
+    <form>
+      {Object.entries(fields).map(([name, fieldAtom]) => (
+        <FormField key={name} name={name} fieldAtom={fieldAtom} />
+      ))}
+    </form>
+  )
+}
+```
+
+## Performance Implications
+
+### Memory Usage
+
+Each atom has its own state in the store:
+
+```js
+// 100 items = 100 atom states in the store
+const itemsAtom = atom(
+  Array.from({ length: 100 }, () => atom({ data: 'value' }))
+)
+```
+
+This is fine for hundreds of items, but thousands might need consideration.
+
+### Garbage Collection
+
+Unreferenced atoms are garbage collected:
+
+```js
+const [todos, setTodos] = useAtom(todosAtom)
+
+// Remove a todo - its atom is GC'd if nothing else references it
+setTodos((prev) => prev.filter((atom) => atom !== atomToRemove))
+```
+
+### Re-render Optimization
+
+This pattern shines with many items:
+
+```jsx
+// With atoms in atom: Only changed item re-renders
+// Without: All items re-render on any change
+
+// 1000 todos, update one:
+// - Atoms in atom: 1 component re-renders
+// - Traditional: 1000+ components re-render
+```
+
+## Edge Cases and Gotchas
+
+### Don't Use Atoms as Primitives
+
+```js
+// Don't do this - atoms aren't comparable
+const countAtom = atom(0)
+const isZeroAtom = atom((get) => get(countAtom) === 0) // ✅ Good
+
+// Comparing atoms themselves is confusing
+const selectedAtom = atom(null)
+const isSelectedAtom = atom((get) => get(selectedAtom) === countAtom) // ❌ Confusing
+```
+
+### TypeScript Complexity
+
+Type inference can be tricky:
+
+```tsx
+import { Atom, PrimitiveAtom } from 'jotai'
+
+// Explicit types help
+const todosAtom: PrimitiveAtom<PrimitiveAtom<Todo>[]> = atom([
+  atom({ text: 'Buy milk', done: false })
+])
+
+// Or use type helper
+type TodoAtom = PrimitiveAtom<Todo>
+type TodosAtom = PrimitiveAtom<TodoAtom[]>
+```
+
+### Atom Identity
+
+Atoms are identified by reference:
+
+```js
+// These are different atoms!
+const atom1 = atom(0)
+const atom2 = atom(0)
+atom1 !== atom2 // true
+
+// This creates a new atom every render - don't do this!
+function Component() {
+  const [todos, setTodos] = useAtom(
+    atom([atom(0)]) // ❌ New atom every render!
+  )
+}
+
+// Define atoms outside components or use useMemo
+const todosAtom = atom([atom(0)]) // ✅ Stable reference
+```
+
+### Using toString() for Keys
+
+Atoms have a unique string representation:
+
+```jsx
+{todos.map((todoAtom) => (
+  <TodoItem key={`${todoAtom}`} atom={todoAtom} />
+  // or: key={todoAtom.toString()}
+))}
+```
+
+## Best Practices
+
+1. **Name clearly**: Use `Atom` suffix (e.g., `todoAtom`, `selectedAtom`)
+2. **Define outside components**: Avoid creating atoms inside render
+3. **Use atomFamily**: For ID-based atom creation
+4. **Document structure**: Complex nesting needs good comments
+5. **Consider alternatives**: Only use when you need the performance benefit
+
+## When Not to Use
+
+- Simple lists with few items (< 50)
+- Read-only data
+- Data that changes all at once
+- When debugging/tracing is more important than performance
+
+## Example: Kanban Board
+
+```jsx
+import { atom, useAtom } from 'jotai'
+
+// Each card is an atom
+const cardsAtom = atom({
+  todo: [
+    atom({ id: 1, text: 'Design API' }),
+    atom({ id: 2, text: 'Write docs' })
+  ],
+  doing: [
+    atom({ id: 3, text: 'Implement feature' })
+  ],
+  done: [
+    atom({ id: 4, text: 'Fix bug' })
+  ]
+})
+
+function Card({ cardAtom }) {
+  const [card, setCard] = useAtom(cardAtom)
+  return (
+    <div className="card">
+      <input
+        value={card.text}
+        onChange={(e) => setCard({ ...card, text: e.target.value })}
+      />
+    </div>
+  )
+}
+
+function Column({ title, cardAtoms }) {
+  return (
+    <div className="column">
+      <h2>{title}</h2>
+      {cardAtoms.map((cardAtom) => (
+        <Card key={`${cardAtom}`} cardAtom={cardAtom} />
+      ))}
+    </div>
+  )
+}
+
+function KanbanBoard() {
+  const [cards] = useAtom(cardsAtom)
+  
+  return (
+    <div className="board">
+      <Column title="To Do" cardAtoms={cards.todo} />
+      <Column title="Doing" cardAtoms={cards.doing} />
+      <Column title="Done" cardAtoms={cards.done} />
+    </div>
+  )
+}
+```
+
+## Learn More
+
+- [Core Internals](/advanced/core-internals) - How atoms are stored
+- [atomFamily](/api-reference/utils#atomfamily) - Helper for creating atoms on-demand
+- [Performance Guide](/essentials/performance) - Optimization strategies

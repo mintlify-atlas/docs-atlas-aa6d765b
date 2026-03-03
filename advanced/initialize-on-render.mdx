@@ -1,0 +1,529 @@
+---
+title: Initialize on Render
+description: Patterns for initializing atom state when components mount
+---
+
+Sometimes you need to create reusable components where atom initial values come from props. This guide covers patterns for initializing atom state at render time.
+
+## When to Use This Pattern
+
+Use initialization on render when:
+- Building reusable components with prop-based initial state
+- Creating component libraries with Jotai state
+- Testing components with specific initial values
+- Server-side rendering with hydrated state
+- Isolating component state instances
+
+## The Problem
+
+Imagine a reusable component that needs initial state from props:
+
+```jsx
+const textAtom = atom('')
+
+function TextEditor({ initialText }) {
+  const [text, setText] = useAtom(textAtom)
+  // How do we set textAtom to initialText?
+  // We can't just atom(initialText) - that's defined at module level
+  
+  return <input value={text} onChange={(e) => setText(e.target.value)} />
+}
+
+// Need multiple instances with different initial values
+<TextEditor initialText="First editor" />
+<TextEditor initialText="Second editor" />
+```
+
+<Warning>
+**Common mistake**: Defining atoms inside components creates new atoms every render, breaking state persistence.
+</Warning>
+
+## Solution: Provider + useHydrateAtoms
+
+Use `Provider` with `useHydrateAtoms` to initialize atoms:
+
+```jsx
+import { atom, Provider, useAtom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const textAtom = atom('')
+
+function HydrateAtoms({ initialValues, children }) {
+  useHydrateAtoms(initialValues)
+  return children
+}
+
+function TextEditor({ initialText }) {
+  return (
+    <Provider>
+      <HydrateAtoms initialValues={[[textAtom, initialText]]}>
+        <TextInput />
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+
+function TextInput() {
+  const [text, setText] = useAtom(textAtom)
+  return (
+    <input 
+      value={text} 
+      onChange={(e) => setText(e.target.value)} 
+    />
+  )
+}
+
+// Each instance has isolated state
+function App() {
+  return (
+    <>
+      <TextEditor initialText="First editor" />
+      <TextEditor initialText="Second editor" />
+    </>
+  )
+}
+```
+
+### How It Works
+
+1. Each `<Provider>` creates a separate store
+2. `useHydrateAtoms` initializes atoms in that store
+3. Child components read from their nearest Provider
+4. Each instance has isolated state
+
+<Info>
+**Key insight**: Atoms are like "database schema", Providers are like "database instances". Multiple Providers can use the same atoms with different values.
+</Info>
+
+## useHydrateAtoms API
+
+### Basic Usage
+
+```jsx
+import { useHydrateAtoms } from 'jotai/utils'
+
+// Initialize one atom
+useHydrateAtoms([[countAtom, 10]])
+
+// Initialize multiple atoms
+useHydrateAtoms([
+  [countAtom, 10],
+  [nameAtom, 'Alice'],
+  [settingsAtom, { theme: 'dark' }]
+])
+```
+
+### With Map (TypeScript)
+
+TypeScript can't infer types from overloaded functions. Use `Map` for better types:
+
+```tsx
+import { useHydrateAtoms } from 'jotai/utils'
+import type { WritableAtom } from 'jotai'
+
+const initialValues = new Map([
+  [countAtom, 10],
+  [nameAtom, 'Alice']
+])
+
+useHydrateAtoms(initialValues)
+```
+
+### Options
+
+```jsx
+// Only hydrate once (ignore prop changes)
+useHydrateAtoms([[countAtom, count]], { once: true })
+
+// Hydrate every time (default: false)
+useHydrateAtoms([[countAtom, count]], { once: false })
+```
+
+## Common Patterns
+
+### Reusable Form Component
+
+```jsx
+import { atom, Provider, useAtom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const emailAtom = atom('')
+const passwordAtom = atom('')
+
+function HydrateAtoms({ initialValues, children }) {
+  useHydrateAtoms(initialValues)
+  return children
+}
+
+function LoginForm({ initialEmail = '', initialPassword = '' }) {
+  return (
+    <Provider>
+      <HydrateAtoms
+        initialValues={[
+          [emailAtom, initialEmail],
+          [passwordAtom, initialPassword]
+        ]}
+      >
+        <FormFields />
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+
+function FormFields() {
+  const [email, setEmail] = useAtom(emailAtom)
+  const [password, setPassword] = useAtom(passwordAtom)
+  
+  return (
+    <form>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+    </form>
+  )
+}
+
+// Use anywhere
+<LoginForm initialEmail="user@example.com" />
+<LoginForm /> {/* Uses empty defaults */}
+```
+
+### Modal with Initial Data
+
+```jsx
+import { atom, Provider, useAtom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const modalDataAtom = atom(null)
+const isOpenAtom = atom(false)
+
+function Modal({ data, children }) {
+  return (
+    <Provider>
+      <HydrateAtoms initialValues={[[modalDataAtom, data]]}>
+        {children}
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+
+function EditUserModal({ user }) {
+  return (
+    <Modal data={user}>
+      <UserForm />
+    </Modal>
+  )
+}
+
+function UserForm() {
+  const [data] = useAtom(modalDataAtom)
+  const [name, setName] = useState(data?.name ?? '')
+  
+  return (
+    <div>
+      <h2>Edit {data?.name}</h2>
+      <input value={name} onChange={(e) => setName(e.target.value)} />
+    </div>
+  )
+}
+```
+
+### List Items with Initial State
+
+```jsx
+import { atom, Provider, useAtom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const itemAtom = atom({ id: 0, text: '', completed: false })
+
+function TodoItem({ initialItem }) {
+  return (
+    <Provider>
+      <HydrateAtoms initialValues={[[itemAtom, initialItem]]}>
+        <TodoItemContent />
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+
+function TodoItemContent() {
+  const [item, setItem] = useAtom(itemAtom)
+  
+  return (
+    <div>
+      <input
+        type="checkbox"
+        checked={item.completed}
+        onChange={(e) => 
+          setItem({ ...item, completed: e.target.checked })
+        }
+      />
+      <span>{item.text}</span>
+    </div>
+  )
+}
+
+function TodoList({ todos }) {
+  return (
+    <div>
+      {todos.map((todo) => (
+        <TodoItem key={todo.id} initialItem={todo} />
+      ))}
+    </div>
+  )
+}
+```
+
+## Server-Side Rendering (SSR)
+
+Hydrate atoms from server data:
+
+```jsx
+import { atom, Provider, useAtom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const userAtom = atom(null)
+const postsAtom = atom([])
+
+function HydrateAtoms({ initialValues, children }) {
+  useHydrateAtoms(initialValues)
+  return children
+}
+
+// Server-side
+export async function getServerSideProps() {
+  const user = await fetchUser()
+  const posts = await fetchPosts()
+  
+  return {
+    props: {
+      initialState: {
+        user,
+        posts
+      }
+    }
+  }
+}
+
+// Client-side
+function App({ initialState }) {
+  return (
+    <Provider>
+      <HydrateAtoms
+        initialValues={[
+          [userAtom, initialState.user],
+          [postsAtom, initialState.posts]
+        ]}
+      >
+        <Dashboard />
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+```
+
+## Performance Implications
+
+### Provider Overhead
+
+Each `<Provider>` creates a new store:
+
+```jsx
+// 100 items = 100 stores
+{items.map(item => (
+  <Provider key={item.id}>
+    <Item initialData={item} />
+  </Provider>
+))}
+```
+
+For many items, consider [atoms in atom](/advanced/atoms-in-atom) pattern instead.
+
+### Re-initialization
+
+```jsx
+// Re-initializes when count changes
+useHydrateAtoms([[countAtom, count]], { once: false })
+
+// Initializes only once
+useHydrateAtoms([[countAtom, count]], { once: true })
+```
+
+<Warning>
+**Default behavior**: Without `{ once: true }`, atoms re-initialize when values change. This can cause unexpected resets.
+</Warning>
+
+## Edge Cases
+
+### Nested Providers
+
+Inner Provider shadows outer:
+
+```jsx
+<Provider>
+  <HydrateAtoms initialValues={[[countAtom, 1]]}>
+    <Provider>
+      <HydrateAtoms initialValues={[[countAtom, 2]]}>
+        <Counter /> {/* Uses count = 2 */}
+      </HydrateAtoms>
+    </Provider>
+  </HydrateAtoms>
+</Provider>
+```
+
+### Provider Without Hydration
+
+Atoms use their default values:
+
+```jsx
+const countAtom = atom(0) // Default: 0
+
+<Provider>
+  <Counter /> {/* count = 0, not hydrated */}
+</Provider>
+```
+
+### Hydration Timing
+
+`useHydrateAtoms` must run before atoms are read:
+
+```jsx
+// ❌ Wrong - Counter reads before hydration
+function Component() {
+  const [count] = useAtom(countAtom) // Reads default value
+  useHydrateAtoms([[countAtom, 10]]) // Too late!
+  return <div>{count}</div>
+}
+
+// ✅ Correct - Hydrate in parent
+function Parent() {
+  useHydrateAtoms([[countAtom, 10]])
+  return <Counter />
+}
+
+function Counter() {
+  const [count] = useAtom(countAtom) // Reads hydrated value
+  return <div>{count}</div>
+}
+```
+
+## Testing
+
+Providers make testing easy:
+
+```jsx
+import { render } from '@testing-library/react'
+import { Provider } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+function TestWrapper({ initialValues, children }) {
+  return (
+    <Provider>
+      <HydrateAtoms initialValues={initialValues}>
+        {children}
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+
+test('counter starts at 10', () => {
+  const { getByText } = render(
+    <TestWrapper initialValues={[[countAtom, 10]]}>
+      <Counter />
+    </TestWrapper>
+  )
+  
+  expect(getByText('Count: 10')).toBeInTheDocument()
+})
+```
+
+## Best Practices
+
+1. **Create wrapper component**: Encapsulate Provider + HydrateAtoms
+2. **Use `once: true` for static data**: Avoid unnecessary re-initialization
+3. **Keep atoms at module level**: Don't define atoms inside components
+4. **Test with different initial values**: Ensure components work with any props
+5. **Consider scope**: Use Provider only when you need isolation
+
+## Alternative: Atoms in Atom
+
+For lists, [atoms in atom](/advanced/atoms-in-atom) might be better:
+
+```jsx
+// Instead of Provider per item
+{items.map(item => (
+  <Provider key={item.id}>
+    <Item initialData={item} />
+  </Provider>
+))}
+
+// Use atoms in atom
+const itemAtomsAtom = atom(
+  items.map(item => atom(item))
+)
+
+{itemAtoms.map(itemAtom => (
+  <Item key={`${itemAtom}`} atom={itemAtom} />
+))}
+```
+
+## TypeScript Example
+
+Full TypeScript setup:
+
+```tsx
+import type { ReactNode } from 'react'
+import { Provider, atom, useAtom } from 'jotai'
+import type { WritableAtom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const textAtom = atom('')
+
+interface AtomsHydratorProps {
+  atomValues: Iterable<readonly [WritableAtom<unknown, [any], unknown>, unknown]>
+  children: ReactNode
+}
+
+function AtomsHydrator({ atomValues, children }: AtomsHydratorProps) {
+  useHydrateAtoms(new Map(atomValues))
+  return children
+}
+
+interface TextEditorProps {
+  initialText: string
+}
+
+export function TextEditor({ initialText }: TextEditorProps) {
+  return (
+    <Provider>
+      <AtomsHydrator atomValues={[[textAtom, initialText]]}>
+        <TextInput />
+      </AtomsHydrator>
+    </Provider>
+  )
+}
+
+function TextInput() {
+  const [text, setText] = useAtom(textAtom)
+  return (
+    <input 
+      value={text} 
+      onChange={(e) => setText(e.target.value)} 
+    />
+  )
+}
+```
+
+## Learn More
+
+- [Provider](/api-reference/core#provider) - Provider API reference
+- [useHydrateAtoms](/api-reference/utils#usehydrateatoms) - Full API documentation
+- [Scope Extension](/api-reference/extensions#scope) - Advanced scoping patterns
+- [Atoms in Atom](/advanced/atoms-in-atom) - Alternative for dynamic state

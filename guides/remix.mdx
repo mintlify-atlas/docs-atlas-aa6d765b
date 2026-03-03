@@ -1,0 +1,309 @@
+---
+title: Remix Integration
+description: How to use Jotai with Remix
+---
+
+Jotai integrates seamlessly with Remix. This guide covers setup, hydration, and best practices for using Jotai in Remix applications.
+
+## Quick Start
+
+<Steps>
+  <Step title="Install Jotai">
+    ```bash
+    npm install jotai
+    ```
+  </Step>
+
+  <Step title="Add Provider to root">
+    ```tsx
+    // app/root.tsx
+    import { Provider } from 'jotai'
+    import {
+      Links,
+      LiveReload,
+      Meta,
+      Outlet,
+      Scripts,
+      ScrollRestoration,
+    } from '@remix-run/react'
+
+    export default function App() {
+      return (
+        <html lang="en">
+          <head>
+            <Meta />
+            <Links />
+          </head>
+          <body>
+            <Provider>
+              <Outlet />
+            </Provider>
+            <ScrollRestoration />
+            <Scripts />
+            <LiveReload />
+          </body>
+        </html>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Create atoms">
+    ```ts
+    // app/atoms/index.ts
+    import { atom } from 'jotai'
+
+    export const userAtom = atom(null)
+    export const themeAtom = atom('light')
+    ```
+  </Step>
+</Steps>
+
+## Why Use a Provider in Remix?
+
+Remix is a server-side rendering framework. Using a `Provider` is essential to:
+
+- Scope state per request
+- Prevent memory leaks
+- Avoid data bleeding between users
+- Ensure fresh state for each render
+
+## Hydration
+
+Hydrate atoms with server-side data using `useHydrateAtoms`:
+
+```tsx
+// app/routes/user.$id.tsx
+import { json, type LoaderFunctionArgs } from '@remix-run/node'
+import { useLoaderData } from '@remix-run/react'
+import { useHydrateAtoms } from 'jotai/utils'
+import { userAtom } from '~/atoms'
+
+export async function loader({ params }: LoaderFunctionArgs) {
+  const user = await getUser(params.id)
+  return json({ user })
+}
+
+function HydrateUser({ user, children }) {
+  useHydrateAtoms([[userAtom, user]])
+  return children
+}
+
+export default function UserPage() {
+  const { user } = useLoaderData<typeof loader>()
+  
+  return (
+    <HydrateUser user={user}>
+      <UserProfile />
+    </HydrateUser>
+  )
+}
+
+function UserProfile() {
+  const [user] = useAtom(userAtom)
+  return <div>{user.name}</div>
+}
+```
+
+## Multiple Atoms Hydration
+
+Hydrate multiple atoms at once:
+
+```tsx
+import { useHydrateAtoms } from 'jotai/utils'
+import { userAtom, settingsAtom, postsAtom } from '~/atoms'
+
+function HydrateAtoms({ user, settings, posts, children }) {
+  useHydrateAtoms([
+    [userAtom, user],
+    [settingsAtom, settings],
+    [postsAtom, posts],
+  ])
+  return children
+}
+
+export async function loader() {
+  const [user, settings, posts] = await Promise.all([
+    getUser(),
+    getSettings(),
+    getPosts(),
+  ])
+  
+  return json({ user, settings, posts })
+}
+
+export default function DashboardPage() {
+  const data = useLoaderData<typeof loader>()
+  
+  return (
+    <HydrateAtoms {...data}>
+      <Dashboard />
+    </HydrateAtoms>
+  )
+}
+```
+
+## Form Actions
+
+Use Jotai atoms with Remix actions:
+
+```tsx
+import { json, redirect, type ActionFunctionArgs } from '@remix-run/node'
+import { Form, useActionData } from '@remix-run/react'
+import { useSetAtom } from 'jotai'
+import { userAtom } from '~/atoms'
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData()
+  const name = formData.get('name')
+  
+  const user = await updateUser({ name })
+  return json({ user })
+}
+
+export default function ProfileEdit() {
+  const actionData = useActionData<typeof action>()
+  const setUser = useSetAtom(userAtom)
+  
+  // Update atom when action completes
+  React.useEffect(() => {
+    if (actionData?.user) {
+      setUser(actionData.user)
+    }
+  }, [actionData, setUser])
+  
+  return (
+    <Form method="post">
+      <input name="name" />
+      <button type="submit">Update</button>
+    </Form>
+  )
+}
+```
+
+## Client-Only Atoms
+
+Some atoms should only exist on the client:
+
+```tsx
+import { atom } from 'jotai'
+import { atomWithStorage } from 'jotai/utils'
+
+// Client-only state
+export const sidebarOpenAtom = atom(false)
+
+// Persistent client state
+export const themeAtom = atomWithStorage('theme', 'light')
+```
+
+Use with SSR guard:
+
+```tsx
+function Sidebar() {
+  const [isOpen, setIsOpen] = useAtom(sidebarOpenAtom)
+  
+  return (
+    <aside className={isOpen ? 'open' : 'closed'}>
+      {/* sidebar content */}
+    </aside>
+  )
+}
+```
+
+## Optimistic UI
+
+Implement optimistic updates with Jotai:
+
+```tsx
+import { atom } from 'jotai'
+import { useFetcher } from '@remix-run/react'
+import { useAtom } from 'jotai'
+
+const todosAtom = atom([])
+
+function TodoList() {
+  const [todos, setTodos] = useAtom(todosAtom)
+  const fetcher = useFetcher()
+  
+  const addTodo = (text) => {
+    // Optimistic update
+    const tempTodo = { id: Date.now(), text, completed: false }
+    setTodos([...todos, tempTodo])
+    
+    // Submit to server
+    fetcher.submit(
+      { text },
+      { method: 'post', action: '/todos' }
+    )
+  }
+  
+  // Handle server response
+  React.useEffect(() => {
+    if (fetcher.data?.todo) {
+      setTodos(fetcher.data.todos)
+    }
+  }, [fetcher.data])
+  
+  return (
+    <div>
+      {todos.map(todo => (
+        <div key={todo.id}>{todo.text}</div>
+      ))}
+    </div>
+  )
+}
+```
+
+## SSR Considerations
+
+### Avoid Async Atoms in SSR
+
+Don't use async atoms that fetch during SSR. Instead, fetch in loaders:
+
+```tsx
+// Bad: Async fetch in atom
+const userAtom = atom(async () => {
+  const res = await fetch('/api/user')
+  return res.json()
+})
+
+// Good: Fetch in loader, hydrate atom
+export async function loader() {
+  const user = await getUser()
+  return json({ user })
+}
+
+function Page() {
+  const { user } = useLoaderData<typeof loader>()
+  useHydrateAtoms([[userAtom, user]])
+}
+```
+
+### Guard Client-Only Code
+
+```tsx
+const clientOnlyAtom = atom(() => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  return localStorage.getItem('key')
+})
+```
+
+## Tips
+
+<Tip>
+Always use a `Provider` in Remix to scope state per request and prevent memory leaks.
+</Tip>
+
+<Tip>
+Use `useHydrateAtoms` to initialize atoms with data from loaders instead of fetching in atoms.
+</Tip>
+
+<Tip>
+Fetch data in Remix loaders and hydrate atoms rather than using async atoms during SSR.
+</Tip>
+
+<Note>
+Place the `Provider` in your root component to ensure all routes have access to the same store.
+</Note>

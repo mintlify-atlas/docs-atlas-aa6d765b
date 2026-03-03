@@ -1,0 +1,190 @@
+---
+title: atomWithReducer
+description: API reference for atomWithReducer utility
+---
+
+`atomWithReducer` creates a writable atom with a reducer function, similar to React's `useReducer` hook.
+
+## Import
+
+```typescript
+import { atomWithReducer } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+// With optional action
+function atomWithReducer<Value, Action>(
+  initialValue: Value,
+  reducer: (value: Value, action?: Action) => Value,
+): WritableAtom<Value, [Action?], void>
+
+// With required action
+function atomWithReducer<Value, Action>(
+  initialValue: Value,
+  reducer: (value: Value, action: Action) => Value,
+): WritableAtom<Value, [Action], void>
+```
+
+## Parameters
+
+<ParamField path="initialValue" type="Value" required>
+  The initial value of the atom
+</ParamField>
+
+<ParamField path="reducer" type="(value: Value, action: Action) => Value" required>
+  A reducer function that takes the current value and an action, and returns the next value
+</ParamField>
+
+## Return Value
+
+Returns a writable atom where:
+- Reading returns the current value
+- Writing dispatches an action to the reducer
+
+## Usage Example
+
+```typescript
+import { useAtom } from 'jotai'
+import { atomWithReducer } from 'jotai/utils'
+
+type Action =
+  | { type: 'increment' }
+  | { type: 'decrement' }
+  | { type: 'set'; value: number }
+
+const countReducer = (prev: number, action: Action) => {
+  switch (action.type) {
+    case 'increment':
+      return prev + 1
+    case 'decrement':
+      return prev - 1
+    case 'set':
+      return action.value
+    default:
+      return prev
+  }
+}
+
+const countAtom = atomWithReducer(0, countReducer)
+
+function Counter() {
+  const [count, dispatch] = useAtom(countAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => dispatch({ type: 'increment' })}>+</button>
+      <button onClick={() => dispatch({ type: 'decrement' })}>-</button>
+      <button onClick={() => dispatch({ type: 'set', value: 0 })}>Reset</button>
+    </div>
+  )
+}
+```
+
+## Complex State Example
+
+```typescript
+import { atomWithReducer } from 'jotai/utils'
+
+interface Todo {
+  id: number
+  text: string
+  completed: boolean
+}
+
+type TodoAction =
+  | { type: 'add'; text: string }
+  | { type: 'remove'; id: number }
+  | { type: 'toggle'; id: number }
+  | { type: 'clear-completed' }
+
+const todoReducer = (todos: Todo[], action: TodoAction): Todo[] => {
+  switch (action.type) {
+    case 'add':
+      return [
+        ...todos,
+        {
+          id: Math.max(0, ...todos.map((t) => t.id)) + 1,
+          text: action.text,
+          completed: false,
+        },
+      ]
+    case 'remove':
+      return todos.filter((todo) => todo.id !== action.id)
+    case 'toggle':
+      return todos.map((todo) =>
+        todo.id === action.id
+          ? { ...todo, completed: !todo.completed }
+          : todo
+      )
+    case 'clear-completed':
+      return todos.filter((todo) => !todo.completed)
+    default:
+      return todos
+  }
+}
+
+const todosAtom = atomWithReducer<Todo[], TodoAction>([], todoReducer)
+
+function TodoList() {
+  const [todos, dispatch] = useAtom(todosAtom)
+
+  return (
+    <div>
+      <button onClick={() => dispatch({ type: 'add', text: 'New Todo' })}>
+        Add Todo
+      </button>
+      {todos.map((todo) => (
+        <div key={todo.id}>
+          <input
+            type="checkbox"
+            checked={todo.completed}
+            onChange={() => dispatch({ type: 'toggle', id: todo.id })}
+          />
+          <span>{todo.text}</span>
+          <button onClick={() => dispatch({ type: 'remove', id: todo.id })}>
+            Delete
+          </button>
+        </div>
+      ))}
+      <button onClick={() => dispatch({ type: 'clear-completed' })}>
+        Clear Completed
+      </button>
+    </div>
+  )
+}
+```
+
+## With Optional Action
+
+```typescript
+import { atomWithReducer } from 'jotai/utils'
+
+// Increment when no action is provided
+const counterReducer = (value: number, action?: number) => {
+  return action !== undefined ? action : value + 1
+}
+
+const countAtom = atomWithReducer(0, counterReducer)
+
+function Counter() {
+  const [count, dispatch] = useAtom(countAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => dispatch()}>Increment</button>
+      <button onClick={() => dispatch(0)}>Reset</button>
+    </div>
+  )
+}
+```
+
+## Notes
+
+- The reducer function should be pure and not cause side effects
+- Similar to React's `useReducer`, but for Jotai atoms
+- The reducer pattern is useful for complex state logic with multiple update paths
+- Works well with TypeScript discriminated unions for type-safe actions

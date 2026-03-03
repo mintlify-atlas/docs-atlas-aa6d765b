@@ -1,0 +1,260 @@
+---
+title: createStore
+description: Create an isolated Jotai store instance
+---
+
+The `createStore` function creates a new store instance that holds atom state. Stores are independent of React and can be used outside of components or passed to a Provider.
+
+## Signature
+
+```typescript
+function createStore(): Store
+```
+
+### Type Definitions
+
+```typescript
+type Store = {
+  get: <Value>(atom: Atom<Value>) => Value
+  set: <Value, Args extends unknown[], Result>(
+    atom: WritableAtom<Value, Args, Result>,
+    ...args: Args
+  ) => Result
+  sub: (atom: AnyAtom, listener: () => void) => () => void
+}
+```
+
+## Parameters
+
+No parameters.
+
+## Returns
+
+<ResponseField name="store" type="Store">
+  A store instance with three methods:
+  
+  <Expandable title="Store Methods">
+    <ResponseField name="get" type="<Value>(atom: Atom<Value>) => Value">
+      Reads an atom's value from the store. If the atom hasn't been initialized, it will be computed.
+    </ResponseField>
+    
+    <ResponseField name="set" type="<Value, Args, Result>(atom: WritableAtom<Value, Args, Result>, ...args: Args) => Result">
+      Writes to an atom in the store. For primitive atoms, pass the new value or an updater function. For derived atoms, pass the arguments expected by the atom's write function.
+    </ResponseField>
+    
+    <ResponseField name="sub" type="(atom: Atom, listener: () => void) => () => void">
+      Subscribes to atom changes. The listener is called whenever the atom's value changes. Returns an unsubscribe function.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { createStore, atom } from 'jotai'
+
+const store = createStore()
+const countAtom = atom(0)
+
+// Get atom value
+const count = store.get(countAtom)
+console.log(count) // 0
+
+// Set atom value
+store.set(countAtom, 1)
+console.log(store.get(countAtom)) // 1
+
+// Set with updater function
+store.set(countAtom, (prev) => prev + 1)
+console.log(store.get(countAtom)) // 2
+```
+
+### Subscribe to Changes
+
+```typescript
+import { createStore, atom } from 'jotai'
+
+const store = createStore()
+const countAtom = atom(0)
+
+// Subscribe to changes
+const unsub = store.sub(countAtom, () => {
+  console.log('Count changed:', store.get(countAtom))
+})
+
+store.set(countAtom, 1) // Logs: "Count changed: 1"
+store.set(countAtom, 2) // Logs: "Count changed: 2"
+
+// Unsubscribe
+unsub()
+store.set(countAtom, 3) // No log
+```
+
+### With Provider
+
+```typescript
+import { createStore, Provider, atom, useAtom } from 'jotai'
+
+const myStore = createStore()
+const countAtom = atom(0)
+
+// Initialize store before rendering
+myStore.set(countAtom, 10)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>Increment</button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <Provider store={myStore}>
+      <Counter />
+    </Provider>
+  )
+}
+```
+
+### Outside React
+
+```typescript
+import { createStore, atom } from 'jotai'
+
+const store = createStore()
+const countAtom = atom(0)
+
+// Use in vanilla JavaScript
+function incrementCount() {
+  const current = store.get(countAtom)
+  store.set(countAtom, current + 1)
+}
+
+// Subscribe to changes
+store.sub(countAtom, () => {
+  const count = store.get(countAtom)
+  document.getElementById('count').textContent = count.toString()
+})
+
+incrementCount() // Updates the DOM
+```
+
+### Server-Side Rendering
+
+```typescript
+import { createStore, atom } from 'jotai'
+
+const userAtom = atom(null)
+
+// Create store per request
+export async function getServerSideProps(context) {
+  const store = createStore()
+
+  // Fetch and initialize data
+  const user = await fetchUser(context.params.id)
+  store.set(userAtom, user)
+
+  return {
+    props: {
+      store,
+      // You'll need to serialize the store state separately
+    },
+  }
+}
+
+function Page({ store }) {
+  return (
+    <Provider store={store}>
+      <UserProfile />
+    </Provider>
+  )
+}
+```
+
+### Derived Atoms
+
+```typescript
+import { createStore, atom } from 'jotai'
+
+const store = createStore()
+
+const countAtom = atom(0)
+const doubleAtom = atom((get) => get(countAtom) * 2)
+
+const incrementAtom = atom(
+  null,
+  (get, set) => {
+    set(countAtom, get(countAtom) + 1)
+  }
+)
+
+console.log(store.get(doubleAtom)) // 0
+
+store.set(incrementAtom)
+console.log(store.get(countAtom)) // 1
+console.log(store.get(doubleAtom)) // 2
+```
+
+### Multiple Independent Stores
+
+```typescript
+import { createStore, atom } from 'jotai'
+
+const store1 = createStore()
+const store2 = createStore()
+
+const countAtom = atom(0)
+
+store1.set(countAtom, 1)
+store2.set(countAtom, 10)
+
+console.log(store1.get(countAtom)) // 1
+console.log(store2.get(countAtom)) // 10
+// Completely independent state
+```
+
+### Integration with External Libraries
+
+```typescript
+import { createStore, atom } from 'jotai'
+import EventEmitter from 'events'
+
+const store = createStore()
+const stateAtom = atom({ status: 'idle' })
+
+const emitter = new EventEmitter()
+
+// Bridge external events to Jotai
+emitter.on('statusChange', (status) => {
+  store.set(stateAtom, { status })
+})
+
+// Subscribe to Jotai changes and emit events
+store.sub(stateAtom, () => {
+  const state = store.get(stateAtom)
+  emitter.emit('stateUpdated', state)
+})
+```
+
+## Notes
+
+- Each store is completely independent - atoms in different stores don't share state
+- Stores can be used outside of React components
+- The store holds weak references to atom state, allowing garbage collection when atoms are no longer used
+- Store methods (`get`, `set`, `sub`) are synchronous
+- The `sub` method automatically mounts the atom and its dependencies
+- Calling `set` will trigger all subscribers of affected atoms
+- You typically don't need to create stores manually - `Provider` creates one automatically
+
+## Related APIs
+
+- [Provider](/api/provider) - Provide a store to React components
+- [getDefaultStore](/api/get-default-store) - Get the default global store
+- [atom](/api/atom) - Create atoms
+- [useAtom](/api/use-atom) - Use atoms in React components

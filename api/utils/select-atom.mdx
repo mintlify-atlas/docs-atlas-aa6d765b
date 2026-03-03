@@ -1,0 +1,240 @@
+---
+title: selectAtom
+description: API reference for selectAtom utility
+---
+
+`selectAtom` creates a derived atom that selects a slice of another atom's value with optional equality checking to prevent unnecessary updates.
+
+## Import
+
+```typescript
+import { selectAtom } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+function selectAtom<Value, Slice>(
+  anAtom: Atom<Value>,
+  selector: (v: Value, prevSlice?: Slice) => Slice,
+  equalityFn?: (a: Slice, b: Slice) => boolean,
+): Atom<Slice>
+```
+
+## Parameters
+
+<ParamField path="anAtom" type="Atom<Value>" required>
+  The source atom to select from
+</ParamField>
+
+<ParamField path="selector" type="(v: Value, prevSlice?: Slice) => Slice" required>
+  A function that extracts a slice from the atom's value. Receives the current value and optionally the previous slice
+</ParamField>
+
+<ParamField path="equalityFn" type="(a: Slice, b: Slice) => boolean">
+  Optional equality function to compare the previous and new slice. Defaults to `Object.is`. If the slices are equal, the previous slice is returned to prevent unnecessary re-renders
+</ParamField>
+
+## Return Value
+
+Returns a read-only derived atom that:
+- Contains the selected slice of the source atom
+- Only updates when the slice changes according to the equality function
+
+## Usage Example
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { selectAtom } from 'jotai/utils'
+
+const userAtom = atom({
+  name: 'Alice',
+  age: 30,
+  email: 'alice@example.com'
+})
+
+const nameAtom = selectAtom(userAtom, (user) => user.name)
+
+function UserName() {
+  const [name] = useAtom(nameAtom)
+  // Only re-renders when name changes, not when age or email change
+  return <div>Name: {name}</div>
+}
+```
+
+## Custom Equality Function
+
+```typescript
+import { selectAtom } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const todosAtom = atom([
+  { id: 1, text: 'Buy milk', completed: false },
+  { id: 2, text: 'Walk dog', completed: true },
+])
+
+// Shallow array equality
+const todoIdsAtom = selectAtom(
+  todosAtom,
+  (todos) => todos.map((t) => t.id),
+  (a, b) => a.length === b.length && a.every((id, i) => id === b[i])
+)
+
+function TodoIds() {
+  const [ids] = useAtom(todoIdsAtom)
+  // Only re-renders when todo IDs change, not when todo properties change
+  return <div>IDs: {ids.join(', ')}</div>
+}
+```
+
+## Nested Object Selection
+
+```typescript
+import { selectAtom } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const appStateAtom = atom({
+  user: {
+    profile: {
+      name: 'Bob',
+      avatar: 'avatar.jpg'
+    },
+    settings: {
+      theme: 'dark'
+    }
+  },
+  ui: {
+    sidebarOpen: true
+  }
+})
+
+const themeAtom = selectAtom(
+  appStateAtom,
+  (state) => state.user.settings.theme
+)
+
+function ThemeToggle() {
+  const [theme] = useAtom(themeAtom)
+  // Only re-renders when theme changes
+  return <div>Theme: {theme}</div>
+}
+```
+
+## Array Filtering
+
+```typescript
+import { selectAtom } from 'jotai/utils'
+import { atom } from 'jotai'
+import { isEqual } from 'lodash'
+
+const tasksAtom = atom([
+  { id: 1, status: 'todo', title: 'Task 1' },
+  { id: 2, status: 'done', title: 'Task 2' },
+  { id: 3, status: 'todo', title: 'Task 3' },
+])
+
+const todoTasksAtom = selectAtom(
+  tasksAtom,
+  (tasks) => tasks.filter((t) => t.status === 'todo'),
+  isEqual // Deep equality check
+)
+
+function TodoList() {
+  const [todos] = useAtom(todoTasksAtom)
+  // Only re-renders when the filtered todo list actually changes
+  return (
+    <ul>
+      {todos.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+## Computed Properties
+
+```typescript
+import { selectAtom } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const cartAtom = atom([
+  { id: 1, name: 'Apple', price: 1.5, quantity: 3 },
+  { id: 2, name: 'Banana', price: 0.8, quantity: 5 },
+])
+
+const totalPriceAtom = selectAtom(
+  cartAtom,
+  (items) => items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+)
+
+function CartTotal() {
+  const [total] = useAtom(totalPriceAtom)
+  return <div>Total: ${total.toFixed(2)}</div>
+}
+```
+
+## With Previous Value
+
+```typescript
+import { selectAtom } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const counterAtom = atom(0)
+
+// Calculate delta from previous value
+const deltaAtom = selectAtom(
+  counterAtom,
+  (current, prev) => {
+    if (prev === undefined) return 0
+    return current - prev
+  }
+)
+
+function Counter() {
+  const [count] = useAtom(counterAtom)
+  const [delta] = useAtom(deltaAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <p>Change: {delta > 0 ? `+${delta}` : delta}</p>
+    </div>
+  )
+}
+```
+
+## Performance Optimization
+
+```typescript
+import { selectAtom } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const bigDataAtom = atom({
+  // Large dataset
+  items: Array.from({ length: 10000 }, (_, i) => ({ id: i, value: i * 2 })),
+  metadata: { total: 10000, updated: Date.now() }
+})
+
+// Only select what you need
+const metadataAtom = selectAtom(
+  bigDataAtom,
+  (data) => data.metadata,
+  (a, b) => a.total === b.total && a.updated === b.updated
+)
+
+function Metadata() {
+  const [metadata] = useAtom(metadataAtom)
+  // Doesn't re-render when items change, only when metadata changes
+  return <div>Total items: {metadata.total}</div>
+}
+```
+
+## Notes
+
+- The returned atom is read-only (derived atom)
+- Useful for preventing unnecessary re-renders by selecting only needed data
+- The equality function defaults to `Object.is`, which works well for primitives
+- For objects and arrays, provide a custom equality function (shallow or deep comparison)
+- The selector function receives the previous slice, allowing for delta calculations
+- Memoizes atoms based on the source atom, selector, and equality function

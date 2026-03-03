@@ -1,0 +1,319 @@
+---
+title: Provider
+description: Learn how to use the Provider component to scope atom state in your React application
+---
+
+The `Provider` component creates an isolated atom state scope in your React component tree. This is useful for creating multiple independent instances of your application state or for testing.
+
+## Basic Usage
+
+Wrap your component tree with a `Provider` to create a new atom state scope:
+
+```tsx
+import { Provider } from 'jotai'
+import { App } from './App'
+
+function Root() {
+  return (
+    <Provider>
+      <App />
+    </Provider>
+  )
+}
+```
+
+## Type Signature
+
+```typescript
+export function Provider({
+  children,
+  store,
+}: {
+  children?: ReactNode
+  store?: Store
+}): ReactElement
+```
+
+## When to Use Provider
+
+### Multiple Component Trees
+
+Use `Provider` when you need multiple independent instances of your application:
+
+```tsx
+import { Provider, atom, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(c => c + 1)}>Increment</button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <>
+      <h2>First Counter</h2>
+      <Provider>
+        <Counter />
+      </Provider>
+      
+      <h2>Second Counter</h2>
+      <Provider>
+        <Counter />
+      </Provider>
+    </>
+  )
+}
+```
+
+In this example, each `Counter` component has its own independent state because they're wrapped in separate `Provider` components.
+
+### Testing
+
+Providers are particularly useful in tests to ensure test isolation:
+
+```tsx
+import { render } from '@testing-library/react'
+import { Provider } from 'jotai'
+import { MyComponent } from './MyComponent'
+
+test('component behaves correctly', () => {
+  const { getByText } = render(
+    <Provider>
+      <MyComponent />
+    </Provider>
+  )
+  // Test assertions...
+})
+```
+
+<Tip>
+  Each test should use its own `Provider` to prevent state leakage between tests.
+</Tip>
+
+## Provider Without Store
+
+When you use `Provider` without passing a `store` prop, it automatically creates a new store:
+
+```tsx
+<Provider>
+  <App />
+</Provider>
+```
+
+Internally, this is implemented using `useRef` to maintain the same store instance across re-renders:
+
+```typescript
+const storeRef = useRef<Store>(null)
+if (storeRef.current === null) {
+  storeRef.current = createStore()
+}
+```
+
+## Provider With Custom Store
+
+You can pass a custom store to the `Provider`:
+
+```tsx
+import { createStore, Provider } from 'jotai'
+
+const myStore = createStore()
+
+function App() {
+  return (
+    <Provider store={myStore}>
+      <YourComponent />
+    </Provider>
+  )
+}
+```
+
+This is useful when:
+- You need to access the store outside of React components
+- You want to initialize the store with specific values
+- You need to share a store across multiple Provider instances
+
+## Default Store Behavior
+
+If you don't use a `Provider`, Jotai will use a default global store:
+
+```tsx
+import { useAtom, atom } from 'jotai'
+
+const countAtom = atom(0)
+
+function Counter() {
+  // Uses the default global store
+  const [count, setCount] = useAtom(countAtom)
+  return <div>{count}</div>
+}
+
+function App() {
+  // No Provider needed
+  return <Counter />
+}
+```
+
+<Note>
+  Using the default store is fine for simple applications, but `Provider` gives you more control and is recommended for larger applications.
+</Note>
+
+## Nested Providers
+
+You can nest Providers to create hierarchical state scopes:
+
+```tsx
+import { Provider, atom, useAtom } from 'jotai'
+
+const themeAtom = atom('light')
+const countAtom = atom(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  const [theme] = useAtom(themeAtom)
+  return (
+    <div style={{ background: theme === 'dark' ? '#222' : '#fff' }}>
+      Count: {count}
+      <button onClick={() => setCount(c => c + 1)}>+</button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <Provider>
+      {/* Shared theme */}
+      <h1>App</h1>
+      
+      <Provider>
+        {/* Independent counter 1 */}
+        <Counter />
+      </Provider>
+      
+      <Provider>
+        {/* Independent counter 2 */}
+        <Counter />
+      </Provider>
+    </Provider>
+  )
+}
+```
+
+<Warning>
+  Each Provider creates a completely independent state scope. Nested Providers don't inherit atom values from parent Providers.
+</Warning>
+
+## Store Context
+
+The `Provider` component uses React Context internally to provide the store:
+
+```typescript
+const StoreContext = createContext<Store | undefined>(undefined)
+
+export function useStore(options?: { store?: Store }): Store {
+  const store = useContext(StoreContext)
+  return options?.store || store || getDefaultStore()
+}
+```
+
+The `useStore` hook is used internally by `useAtom`, `useAtomValue`, and `useSetAtom` to access the current store.
+
+## Advanced: Custom Store Options
+
+You can access the store in your components using the `store` option:
+
+```tsx
+import { createStore, useAtom } from 'jotai'
+
+const myStore = createStore()
+const countAtom = atom(0)
+
+function Counter() {
+  // Use a specific store instead of the Provider's store
+  const [count, setCount] = useAtom(countAtom, { store: myStore })
+  return <div>{count}</div>
+}
+```
+
+## Best Practices
+
+<Tip>
+  Use `Provider` at the root of your application to make your app more testable and to avoid issues with server-side rendering.
+</Tip>
+
+<Tip>
+  When building component libraries, always use `Provider` to avoid polluting the global default store.
+</Tip>
+
+<Warning>
+  In development mode, Jotai will warn you if multiple instances of Jotai are detected using the default store, which can cause unexpected behavior.
+</Warning>
+
+## Examples
+
+### Server-Side Rendering
+
+```tsx
+import { Provider } from 'jotai'
+
+function App({ initialData }) {
+  return (
+    <Provider>
+      <MyApp data={initialData} />
+    </Provider>
+  )
+}
+
+export default App
+```
+
+### Testing with Custom Initial Values
+
+```tsx
+import { render } from '@testing-library/react'
+import { createStore, Provider } from 'jotai'
+import { countAtom } from './atoms'
+import { Counter } from './Counter'
+
+test('counter starts at 10', () => {
+  const store = createStore()
+  store.set(countAtom, 10)
+  
+  const { getByText } = render(
+    <Provider store={store}>
+      <Counter />
+    </Provider>
+  )
+  
+  expect(getByText('10')).toBeInTheDocument()
+})
+```
+
+### Multiple Independent Forms
+
+```tsx
+import { Provider } from 'jotai'
+import { Form } from './Form'
+
+function App() {
+  return (
+    <div>
+      <h2>User 1</h2>
+      <Provider>
+        <Form />
+      </Provider>
+      
+      <h2>User 2</h2>
+      <Provider>
+        <Form />
+      </Provider>
+    </div>
+  )
+}
+```

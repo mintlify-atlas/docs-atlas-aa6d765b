@@ -1,0 +1,210 @@
+---
+title: useAtomValue
+description: React hook to read atom values
+---
+
+The `useAtomValue` hook reads an atom value and subscribes the component to re-render when the atom value changes. Use this hook when you only need to read the atom value and don't need the setter function.
+
+## Signature
+
+```typescript
+function useAtomValue<Value>(
+  atom: Atom<Value>,
+  options?: Options,
+): Awaited<Value>
+```
+
+### Type Definitions
+
+```typescript
+type Options = {
+  store?: Store
+  delay?: number
+  unstable_promiseStatus?: boolean
+}
+```
+
+## Parameters
+
+<ParamField path="atom" type="Atom<Value>" required>
+  The atom to read. Can be any atom (primitive, derived, async).
+</ParamField>
+
+<ParamField path="options" type="Options" optional>
+  Optional configuration object.
+</ParamField>
+
+<ParamField path="options.store" type="Store" optional>
+  Custom store to use instead of the default Provider store.
+</ParamField>
+
+<ParamField path="options.delay" type="number" optional>
+  Delay in milliseconds before re-rendering when the atom value changes. Useful for debouncing updates or waiting for promises to potentially resolve.
+</ParamField>
+
+<ParamField path="options.unstable_promiseStatus" type="boolean" optional>
+  Enable promise status tracking. Defaults to `true` when `React.use` is not available (React < 19). When enabled, promises are augmented with status properties for better Suspense integration.
+</ParamField>
+
+## Returns
+
+<ResponseField name="value" type="Awaited<Value>">
+  The current value of the atom. If the atom's value is a promise, it will be unwrapped using React Suspense (via `React.use` in React 19+ or a polyfill in earlier versions).
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { atom, useAtomValue } from 'jotai'
+
+const countAtom = atom(0)
+const doubleAtom = atom((get) => get(countAtom) * 2)
+
+function DoubleCount() {
+  const double = useAtomValue(doubleAtom)
+
+  return <div>Double: {double}</div>
+}
+```
+
+### With Async Atom
+
+```typescript
+import { atom, useAtomValue } from 'jotai'
+import { Suspense } from 'react'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+function UserName() {
+  const user = useAtomValue(userAtom)
+
+  return <div>Hello, {user.name}!</div>
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UserName />
+    </Suspense>
+  )
+}
+```
+
+### With Custom Store
+
+```typescript
+import { atom, createStore, useAtomValue } from 'jotai'
+
+const countAtom = atom(0)
+const myStore = createStore()
+
+function Count() {
+  const count = useAtomValue(countAtom, { store: myStore })
+
+  return <div>Count: {count}</div>
+}
+```
+
+### With Delay Option
+
+```typescript
+import { atom, useAtomValue } from 'jotai'
+
+const searchQueryAtom = atom('')
+
+const searchResultsAtom = atom(async (get) => {
+  const query = get(searchQueryAtom)
+  const response = await fetch(`/api/search?q=${query}`)
+  return response.json()
+})
+
+function SearchResults() {
+  // Delay re-rendering by 200ms to reduce flashing during rapid updates
+  const results = useAtomValue(searchResultsAtom, { delay: 200 })
+
+  return (
+    <div>
+      {results.map((result) => (
+        <div key={result.id}>{result.title}</div>
+      ))}
+    </div>
+  )
+}
+```
+
+### Derived Atom Dependency
+
+```typescript
+import { atom, useAtomValue, useSetAtom } from 'jotai'
+
+const firstNameAtom = atom('John')
+const lastNameAtom = atom('Doe')
+
+const fullNameAtom = atom((get) => {
+  return `${get(firstNameAtom)} ${get(lastNameAtom)}`
+})
+
+function Profile() {
+  const fullName = useAtomValue(fullNameAtom)
+  const setFirstName = useSetAtom(firstNameAtom)
+  const setLastName = useSetAtom(lastNameAtom)
+
+  return (
+    <div>
+      <p>Full Name: {fullName}</p>
+      <input onChange={(e) => setFirstName(e.target.value)} />
+      <input onChange={(e) => setLastName(e.target.value)} />
+    </div>
+  )
+}
+```
+
+### With AbortSignal
+
+```typescript
+import { atom, useAtomValue } from 'jotai'
+import { Suspense } from 'react'
+
+const todoIdAtom = atom(1)
+
+const todoAtom = atom(async (get, { signal }) => {
+  const id = get(todoIdAtom)
+  const response = await fetch(`/api/todos/${id}`, { signal })
+  return response.json()
+})
+
+function Todo() {
+  const todo = useAtomValue(todoAtom)
+
+  return <div>{todo.title}</div>
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Todo />
+    </Suspense>
+  )
+}
+```
+
+## Notes
+
+- The component will re-render whenever the atom value changes
+- For async atoms, the component will suspend until the promise resolves
+- The hook uses React's `useDebugValue` to display the atom value in React DevTools
+- When the atom or store changes, the component will re-render immediately with the new value
+- The `delay` option is useful for optimizing updates when you expect values to change rapidly
+- Promises are automatically aborted when dependencies change (via AbortSignal)
+
+## Related APIs
+
+- [useAtom](/api/use-atom) - Read and write atom values
+- [useSetAtom](/api/use-set-atom) - Write atom values only
+- [atom](/api/atom) - Create atoms
+- [Provider](/api/provider) - Provide a custom store

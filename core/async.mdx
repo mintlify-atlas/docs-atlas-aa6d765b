@@ -1,0 +1,439 @@
+---
+title: Async Atoms & Suspense
+description: Learn how to work with async atoms and React Suspense in Jotai
+---
+
+Jotai has first-class support for asynchronous atoms. You can create atoms with async read functions, and Jotai will handle the Promise resolution automatically using React Suspense.
+
+## Async Read Atoms
+
+Create an async atom by making the read function async:
+
+```tsx
+import { atom } from 'jotai'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+```
+
+## Using Async Atoms with Suspense
+
+Wrap components that use async atoms in a `Suspense` boundary:
+
+```tsx
+import { Suspense } from 'react'
+import { useAtom } from 'jotai'
+
+function UserProfile() {
+  const [user] = useAtom(userAtom)
+  // user is the resolved value, not a Promise
+  return <div>Hello, {user.name}!</div>
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UserProfile />
+    </Suspense>
+  )
+}
+```
+
+<Note>
+  React Suspense is required when using async atoms. If you don't provide a Suspense boundary, React will throw an error.
+</Note>
+
+## How It Works
+
+When you read an async atom:
+
+1. Jotai detects that the value is a Promise
+2. The Promise is thrown to React (Suspense mechanism)
+3. React catches the Promise and shows the fallback
+4. When the Promise resolves, React re-renders with the actual value
+
+Internally, Jotai uses React's `use` hook (or a shim for older React versions):
+
+```typescript
+const use = React.use || ((promise) => {
+  if (promise.status === 'pending') {
+    throw promise
+  } else if (promise.status === 'fulfilled') {
+    return promise.value
+  } else if (promise.status === 'rejected') {
+    throw promise.reason
+  }
+})
+```
+
+## Async Derived Atoms
+
+Create async atoms that depend on other atoms:
+
+```tsx
+import { atom } from 'jotai'
+
+const userIdAtom = atom(1)
+
+const userAtom = atom(async (get) => {
+  const userId = get(userIdAtom)
+  const response = await fetch(`/api/users/${userId}`)
+  return response.json()
+})
+```
+
+When `userIdAtom` changes, `userAtom` automatically re-fetches:
+
+```tsx
+function UserProfile() {
+  const [user] = useAtom(userAtom)
+  const [, setUserId] = useAtom(userIdAtom)
+  
+  return (
+    <div>
+      <p>User: {user.name}</p>
+      <button onClick={() => setUserId(id => id + 1)}>
+        Next User
+      </button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UserProfile />
+    </Suspense>
+  )
+}
+```
+
+## Real-World Example
+
+Here's a complete example from the Jotai source (Hacker News app):
+
+```tsx
+import { Suspense } from 'react'
+import { Provider, atom, useAtom, useSetAtom } from 'jotai'
+
+type PostData = {
+  by: string
+  id: number
+  time: number
+  title?: string
+  url?: string
+  text?: string
+}
+
+const postIdAtom = atom(9001)
+
+const postDataAtom = atom(async (get) => {
+  const id = get(postIdAtom)
+  const response = await fetch(
+    `https://hacker-news.firebaseio.com/v0/item/${id}.json`
+  )
+  const data: PostData = await response.json()
+  return data
+})
+
+function PostTitle() {
+  const [{ by, time, title, url }] = useAtom(postDataAtom)
+  return (
+    <>
+      <h2>{by}</h2>
+      <h6>{new Date(time * 1000).toLocaleDateString('en-US')}</h6>
+      {title && <h4>{title}</h4>}
+      {url && <a href={url}>{url}</a>}
+    </>
+  )
+}
+
+function NextButton() {
+  const setPostId = useSetAtom(postIdAtom)
+  return (
+    <button onClick={() => setPostId(id => id + 1)}>
+      Next Post
+    </button>
+  )
+}
+
+function App() {
+  return (
+    <Provider>
+      <Suspense fallback={<h2>Loading...</h2>}>
+        <PostTitle />
+      </Suspense>
+      <NextButton />
+    </Provider>
+  )
+}
+```
+
+## Async Write Actions
+
+You can also make write functions async:
+
+```tsx
+const fetchCountAtom = atom(
+  (get) => get(countAtom),
+  async (get, set, url: string) => {
+    const response = await fetch(url)
+    const data = await response.json()
+    set(countAtom, data.count)
+  }
+)
+
+function Controls() {
+  const [, fetchCount] = useAtom(fetchCountAtom)
+  
+  return (
+    <button onClick={() => fetchCount('/api/count')}>
+      Fetch Count
+    </button>
+  )
+}
+```
+
+<Note>
+  Async write functions don't require Suspense. They return a Promise that you can await if needed.
+</Note>
+
+## Error Handling
+
+Use Error Boundaries to catch errors from async atoms:
+
+```tsx
+import { Component, Suspense } from 'react'
+
+class ErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false }
+  
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      return <div>Something went wrong!</div>
+    }
+    return this.props.children
+  }
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<div>Loading...</div>}>
+        <UserProfile />
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+```
+
+## Promise Status
+
+Jotai attaches status information to Promises internally:
+
+```typescript
+const attachPromiseStatus = (promise) => {
+  if (!promise.status) {
+    promise.status = 'pending'
+    promise.then(
+      (v) => {
+        promise.status = 'fulfilled'
+        promise.value = v
+      },
+      (e) => {
+        promise.status = 'rejected'
+        promise.reason = e
+      }
+    )
+  }
+}
+```
+
+This allows for efficient Promise handling and re-renders.
+
+## Continuable Promises
+
+Jotai creates "continuable promises" that automatically update when dependencies change:
+
+```typescript
+const createContinuablePromise = (store, promise, getValue) => {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      const nextValue = getValue()
+      if (isPromiseLike(nextValue)) {
+        // Continue with new promise
+        nextValue.then(resolve, reject)
+      } else {
+        resolve(nextValue)
+      }
+    }
+    promise.then(resolve, reject)
+    registerAbortHandler(store, promise, onAbort)
+  })
+}
+```
+
+This ensures that when atom dependencies change mid-flight, the latest Promise is used.
+
+## Options
+
+### delay
+
+Delay re-rendering to wait for a Promise to possibly resolve:
+
+```tsx
+function UserProfile() {
+  const user = useAtomValue(userAtom, { delay: 100 })
+  return <div>{user.name}</div>
+}
+```
+
+This can help reduce loading flashes for fast requests.
+
+### unstable_promiseStatus
+
+Control whether to attach Promise status (defaults to `true` for React < 19):
+
+```tsx
+const user = useAtomValue(userAtom, { unstable_promiseStatus: false })
+```
+
+## Best Practices
+
+<Tip>
+  Always wrap async atoms in Suspense boundaries to provide loading states.
+</Tip>
+
+<Tip>
+  Use Error Boundaries to gracefully handle errors from async atoms.
+</Tip>
+
+<Tip>
+  Combine async atoms with other atoms to create reactive data fetching that responds to user interactions.
+</Tip>
+
+<Warning>
+  Don't try to catch errors from async atoms directly in the component. Use Error Boundaries instead.
+</Warning>
+
+## Common Patterns
+
+### Conditional Fetching
+
+```tsx
+const userIdAtom = atom<number | null>(null)
+
+const userAtom = atom(async (get) => {
+  const userId = get(userIdAtom)
+  if (userId === null) {
+    return null
+  }
+  const response = await fetch(`/api/users/${userId}`)
+  return response.json()
+})
+```
+
+### Parallel Fetching
+
+```tsx
+const user1Atom = atom(async () => {
+  const response = await fetch('/api/users/1')
+  return response.json()
+})
+
+const user2Atom = atom(async () => {
+  const response = await fetch('/api/users/2')
+  return response.json()
+})
+
+const usersAtom = atom(async (get) => {
+  const [user1, user2] = await Promise.all([
+    get(user1Atom),
+    get(user2Atom),
+  ])
+  return [user1, user2]
+})
+```
+
+### Sequential Fetching
+
+```tsx
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+const userPostsAtom = atom(async (get) => {
+  const user = await get(userAtom)
+  const response = await fetch(`/api/users/${user.id}/posts`)
+  return response.json()
+})
+```
+
+### Refresh Pattern
+
+```tsx
+const refreshCountAtom = atom(0)
+
+const dataAtom = atom(async (get) => {
+  get(refreshCountAtom) // Create dependency
+  const response = await fetch('/api/data')
+  return response.json()
+})
+
+const refreshAtom = atom(
+  null,
+  (get, set) => set(refreshCountAtom, c => c + 1)
+)
+
+function DataDisplay() {
+  const [data] = useAtom(dataAtom)
+  const [, refresh] = useAtom(refreshAtom)
+  
+  return (
+    <div>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+      <button onClick={refresh}>Refresh</button>
+    </div>
+  )
+}
+```
+
+### Loading States with Manual Control
+
+```tsx
+import { Suspense, useState, useTransition } from 'react'
+
+function App() {
+  const [isPending, startTransition] = useTransition()
+  const [userId, setUserId] = useAtom(userIdAtom)
+  
+  return (
+    <div>
+      <button
+        onClick={() => startTransition(() => setUserId(id => id + 1))}
+        disabled={isPending}
+      >
+        {isPending ? 'Loading...' : 'Next User'}
+      </button>
+      
+      <Suspense fallback={<div>Loading user...</div>}>
+        <UserProfile />
+      </Suspense>
+    </div>
+  )
+}
+```
+
+<Tip>
+  Use React's `useTransition` hook for more control over loading states when updating async atoms.
+</Tip>

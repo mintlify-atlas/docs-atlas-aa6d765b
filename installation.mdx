@@ -1,0 +1,165 @@
+---
+title: Installation
+description: Install Jotai in your React project
+---
+
+# Installation
+
+Get started with Jotai by installing it in your React project.
+
+## Requirements
+
+<Card title="Minimum Requirements" icon="check">
+  - **React**: 17.0.0 or higher
+  - **Node.js**: 12.20.0 or higher
+  - **TypeScript**: 3.8 or higher (optional but recommended)
+</Card>
+
+## Install Jotai
+
+Choose your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install jotai
+```
+
+```bash yarn
+yarn add jotai
+```
+
+```bash pnpm
+pnpm add jotai
+```
+
+```bash bun
+bun add jotai
+```
+
+</CodeGroup>
+
+That's it! No additional configuration or setup required.
+
+## TypeScript Support
+
+Jotai is written in TypeScript and includes full type definitions out of the box. No need to install separate `@types` packages.
+
+<Note>
+  Jotai requires **TypeScript 3.8 or higher** for full type support. The library provides excellent type inference, so your atoms will be fully typed automatically.
+</Note>
+
+### TypeScript Version Support
+
+Jotai provides different type definitions based on your TypeScript version:
+
+- **TypeScript 4.8+**: Full features with latest type improvements
+- **TypeScript 3.8+**: Full compatibility with stable types
+- **TypeScript < 3.8**: Not supported
+
+## Importing Jotai
+
+Once installed, you can import from the main package:
+
+### Core Functions
+
+```typescript
+import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
+```
+
+### Utility Functions
+
+Jotai provides many utilities for common patterns:
+
+```typescript
+import { atomWithStorage, atomFamily, selectAtom } from 'jotai/utils'
+```
+
+<Info>
+  The utilities are in a separate import path (`jotai/utils`) to keep the core bundle size minimal. Import utilities only when you need them.
+</Info>
+
+## Package Exports
+
+Jotai uses modern package exports with support for different module systems:
+
+```json
+{
+  "jotai": "Main package with core functions",
+  "jotai/utils": "Utility functions and atoms",
+  "jotai/vanilla": "Vanilla (non-React) atoms",
+  "jotai/vanilla/utils": "Vanilla utility functions",
+  "jotai/react": "React-specific hooks",
+  "jotai/react/utils": "React utility hooks"
+}
+```
+
+### ESM and CJS Support
+
+Jotai supports both ES modules and CommonJS:
+
+- **ESM**: Modern import/export syntax (recommended)
+- **CommonJS**: Node.js require syntax
+- **React Native**: Optimized bundle for React Native
+
+The correct version is automatically selected based on your build environment.
+
+## Bundle Size
+
+<CardGroup cols={2}>
+  <Card title="Core Package" icon="box">
+    **~2kb** minified and gzipped
+  </Card>
+  
+  <Card title="With Utils" icon="boxes-stacked">
+    Import utilities as needed - tree-shakeable
+  </Card>
+</CardGroup>
+
+Jotai's core is intentionally minimal. Utilities are separate, so you only bundle what you use.
+
+## Next Steps
+
+<Card title="Ready to Start?" icon="rocket" href="/quickstart">
+  Follow our quickstart guide to build your first Jotai app in 5 minutes.
+</Card>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="TypeScript errors about version">
+    If you see TypeScript errors, make sure you're using TypeScript 3.8 or higher. You can check your version with:
+    
+    ```bash
+    npx tsc --version
+    ```
+    
+    Upgrade TypeScript if needed:
+    
+    ```bash
+    npm install -D typescript@latest
+    ```
+  </Accordion>
+  
+  <Accordion title="Module not found errors">
+    If you get "Module not found" errors, ensure:
+    
+    1. You've installed the package: `npm install jotai`
+    2. Your bundler supports package exports (most modern bundlers do)
+    3. You're importing from the correct path: `jotai` or `jotai/utils`
+  </Accordion>
+  
+  <Accordion title="React version compatibility">
+    Jotai requires React 17.0.0 or higher. Check your React version:
+    
+    ```bash
+    npm list react
+    ```
+    
+    Upgrade React if needed:
+    
+    ```bash
+    npm install react@latest react-dom@latest
+    ```
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,188 @@
+---
+title: useResetAtom
+description: Reset an atom to its initial value
+---
+
+`useResetAtom` is a utility hook that returns a function to reset an atom to its initial value. It uses the special `RESET` symbol internally.
+
+## When to use it
+
+Use `useResetAtom` when you need to reset an atom back to its default/initial value without knowing what that value is.
+
+## Signature
+
+```ts
+function useResetAtom<T>(
+  anAtom: WritableAtom<unknown, [typeof RESET], T>,
+  options?: Options
+): () => T
+```
+
+### Parameters
+
+- `anAtom`: A writable atom that supports the RESET symbol
+- `options`: Optional configuration object
+  - `store`: Custom store to use (defaults to the store from Provider)
+
+### Returns
+
+A stable function that resets the atom when called.
+
+## Basic Usage
+
+```tsx
+import { atom } from 'jotai'
+import { useResetAtom } from 'jotai/react/utils'
+
+const countAtom = atom(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  const resetCount = useResetAtom(countAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+      <button onClick={resetCount}>Reset</button>
+    </div>
+  )
+}
+```
+
+## With atomWithReset
+
+For primitive atoms, use `atomWithReset` to enable reset functionality:
+
+```tsx
+import { atomWithReset } from 'jotai/utils'
+import { useResetAtom } from 'jotai/react/utils'
+
+const formAtom = atomWithReset({
+  name: '',
+  email: '',
+  message: ''
+})
+
+function ContactForm() {
+  const [form, setForm] = useAtom(formAtom)
+  const resetForm = useResetAtom(formAtom)
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    await submitForm(form)
+    resetForm() // Clear form after submission
+  }
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        value={form.name}
+        onChange={(e) => setForm({ ...form, name: e.target.value })}
+      />
+      <button type="submit">Submit</button>
+      <button type="button" onClick={resetForm}>Clear</button>
+    </form>
+  )
+}
+```
+
+## With Custom Write Logic
+
+You can implement custom reset behavior in your atom:
+
+```tsx
+import { atom } from 'jotai'
+import { useResetAtom } from 'jotai/react/utils'
+import { RESET } from 'jotai/utils'
+
+const listAtom = atom(
+  ['initial item'],
+  (get, set, update) => {
+    if (update === RESET) {
+      set(listAtom, ['initial item'])
+    } else {
+      set(listAtom, update)
+    }
+  }
+)
+
+function ItemList() {
+  const [items, setItems] = useAtom(listAtom)
+  const resetList = useResetAtom(listAtom)
+  
+  return (
+    <div>
+      <ul>{items.map(item => <li key={item}>{item}</li>)}</ul>
+      <button onClick={() => setItems([...items, 'new item'])}>
+        Add Item
+      </button>
+      <button onClick={resetList}>Reset List</button>
+    </div>
+  )
+}
+```
+
+## Resetting Multiple Atoms
+
+You can create a custom hook to reset multiple related atoms:
+
+```tsx
+import { atomWithReset } from 'jotai/utils'
+import { useResetAtom } from 'jotai/react/utils'
+
+const nameAtom = atomWithReset('')
+const emailAtom = atomWithReset('')
+const ageAtom = atomWithReset(0)
+
+function useResetForm() {
+  const resetName = useResetAtom(nameAtom)
+  const resetEmail = useResetAtom(emailAtom)
+  const resetAge = useResetAtom(ageAtom)
+  
+  return () => {
+    resetName()
+    resetEmail()
+    resetAge()
+  }
+}
+
+function Form() {
+  const resetForm = useResetForm()
+  
+  return (
+    <div>
+      {/* form fields */}
+      <button onClick={resetForm}>Reset All</button>
+    </div>
+  )
+}
+```
+
+## Comparison with Direct Setting
+
+```tsx
+// Manual reset - requires knowing the initial value
+const [count, setCount] = useAtom(countAtom)
+setCount(0) // What if initial value changes?
+
+// With useResetAtom - automatically uses the correct initial value
+const resetCount = useResetAtom(countAtom)
+resetCount() // Always resets to the atom's defined initial value
+```
+
+## TypeScript
+
+`useResetAtom` works with properly typed atoms:
+
+```tsx
+import { atomWithReset } from 'jotai/utils'
+import { useResetAtom } from 'jotai/react/utils'
+
+const userAtom = atomWithReset<User | null>(null)
+
+function Component() {
+  const resetUser = useResetAtom(userAtom)
+  // resetUser is typed as () => void
+}
+```

@@ -1,0 +1,220 @@
+---
+title: TypeScript
+description: How to use Jotai with TypeScript
+---
+
+Jotai is built with TypeScript and provides excellent type inference out of the box. This guide covers TypeScript usage patterns and best practices.
+
+## Version Requirements
+
+Jotai uses TypeScript 3.8+ syntax. Make sure you're using TypeScript 3.8 or higher.
+
+Jotai relies heavily on type inference and requires `strictNullChecks` to be enabled. We recommend adding `"strict": true` in your `tsconfig.json`.
+
+## Primitive Atoms
+
+### Type Inference
+
+Primitive atoms are automatically type inferred:
+
+```ts
+const numAtom = atom(0) // PrimitiveAtom<number>
+const strAtom = atom('hello') // PrimitiveAtom<string>
+const boolAtom = atom(true) // PrimitiveAtom<boolean>
+```
+
+### Explicit Typing
+
+You can explicitly type primitive atoms when needed:
+
+```ts
+const numAtom = atom<number>(0)
+const numAtom = atom<number | null>(null)
+const arrAtom = atom<string[]>([])
+const userAtom = atom<User | undefined>(undefined)
+```
+
+## Derived Atoms
+
+### Type Inference (Recommended)
+
+In most cases, derived atoms can have their types inferred automatically:
+
+```ts
+// Read-only derived atoms
+const readOnlyAtom = atom((get) => get(numAtom))
+const asyncReadOnlyAtom = atom(async (get) => await get(someAsyncAtom))
+
+// Write-only atoms
+const writeOnlyAtom = atom(null, (_get, set, str: string) => {
+  set(fooAtom, str)
+})
+
+const multipleArgumentsAtom = atom(
+  null,
+  (_get, set, valueOne: number, valueTwo: number) => {
+    set(fooAtom, Math.max(valueOne, valueTwo))
+  }
+)
+
+// Read/Write atoms
+const readWriteAtom = atom(
+  (get) => get(strAtom),
+  (_get, set, num: number) => set(strAtom, String(num))
+)
+```
+
+### Explicit Typing
+
+For complex scenarios, you can explicitly type derived atoms:
+
+```ts
+const asyncStrAtom = atom<Promise<string>>(async () => 'foo')
+
+// Write-only atoms with explicit types
+// Type parameters: [read value, write args, write return]
+const writeOnlyAtom = atom<null, [string, number], void>(
+  null,
+  (_get, set, stringValue, numberValue) => {
+    set(fooAtom, stringValue)
+  }
+)
+
+// Read/Write atoms with explicit types
+const readWriteAtom = atom<Promise<string>, [number], void>(
+  async (get) => await get(asyncStrAtom),
+  (_get, set, num) => set(strAtom, String(num))
+)
+```
+
+## Using Atoms in Components
+
+### useAtom Type Inference
+
+The `useAtom` hook is automatically typed based on the atom:
+
+```ts
+const [num, setNum] = useAtom(primitiveNumAtom) // [number, SetAtom<number, void>]
+const [num] = useAtom(readOnlyNumAtom) // [number]
+const [, setNum] = useAtom(writeOnlyNumAtom) // [never, SetAtom<Args, Result>]
+```
+
+### Extracting Atom Value Types
+
+Use `ExtractAtomValue` to get the value type of an atom:
+
+```ts
+import { ExtractAtomValue, useAtomValue } from 'jotai'
+import { userAtom } from './state'
+
+function useGetReviewQuery(user: ExtractAtomValue<typeof userAtom>) {
+  return fetch('/api/user/' + user.id + '/review')
+}
+
+export default function WriteReview() {
+  const user = useAtomValue(userAtom)
+  const res = useGetReviewQuery(user)
+}
+```
+
+## Async Atoms
+
+### Async Read Atoms
+
+```ts
+const asyncDataAtom = atom(async () => {
+  const response = await fetch('/api/data')
+  return response.json()
+})
+
+// Type is inferred as Atom<Promise<any>>
+```
+
+### Typed Async Atoms
+
+```ts
+interface User {
+  id: string
+  name: string
+}
+
+const userAtom = atom<Promise<User>>(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+```
+
+### Mixed Sync/Async Values
+
+```ts
+const baseAtom = atom<number | Promise<number>>(0)
+
+// Can accept both sync and async values
+const Component = () => {
+  const [value, setValue] = useAtom(baseAtom)
+  
+  const handleSync = () => setValue(42)
+  const handleAsync = () => setValue(fetch('/api/number'))
+}
+```
+
+## Common Patterns
+
+### Optional Values
+
+```ts
+const userAtom = atom<User | null>(null)
+const optionalCountAtom = atom<number | undefined>(undefined)
+```
+
+### Generic Atoms
+
+```ts
+function atomWithDefault<T>(defaultValue: T) {
+  const baseAtom = atom<T | null>(null)
+  return atom(
+    (get) => get(baseAtom) ?? defaultValue,
+    (_get, set, value: T) => set(baseAtom, value)
+  )
+}
+
+const myAtom = atomWithDefault<string>('hello')
+```
+
+### Atom Families
+
+```ts
+import { atomFamily } from 'jotai/utils'
+
+interface TodoParams {
+  id: string
+}
+
+interface Todo {
+  id: string
+  title: string
+  completed: boolean
+}
+
+const todoAtomFamily = atomFamily((param: TodoParams) =>
+  atom<Todo>({
+    id: param.id,
+    title: '',
+    completed: false,
+  })
+)
+```
+
+## Tips
+
+<Tip>
+Let TypeScript infer types when possible. Explicit typing is only needed for complex scenarios or when you need to accept multiple types.
+</Tip>
+
+<Tip>
+Use `ExtractAtomValue` to extract atom value types instead of duplicating type definitions.
+</Tip>
+
+<Note>
+If you encounter type errors with async atoms, make sure you're using `Suspense` or wrapping with `loadable`.
+</Note>

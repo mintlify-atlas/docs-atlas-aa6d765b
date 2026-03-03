@@ -1,0 +1,89 @@
+---
+title: useResetAtom
+description: Reset an atom to its initial value
+---
+
+## useResetAtom
+
+Resets an atom to its initial value.
+
+### Import
+
+```typescript
+import { useResetAtom } from 'jotai/utils'
+```
+
+### Signature
+
+```typescript
+function useResetAtom<T>(
+  anAtom: WritableAtom<unknown, [typeof RESET], T>,
+  options?: Options
+): () => T
+```
+
+### Parameters
+
+<ParamField path="anAtom" type="WritableAtom<unknown, [typeof RESET], T>" required>
+  A writable atom that can be reset.
+</ParamField>
+
+<ParamField path="options" type="Options">
+  Optional configuration:
+  - `store`: Specify a custom store to use
+</ParamField>
+
+### Returns
+
+Returns a callback function that resets the atom to its initial value when called.
+
+**Type:** `() => T`
+
+### Usage
+
+```typescript
+import { atom } from 'jotai'
+import { useResetAtom } from 'jotai/utils'
+
+const countAtom = atom(0)
+
+function Counter() {
+  const resetCount = useResetAtom(countAtom)
+  
+  return (
+    <button onClick={resetCount}>
+      Reset counter
+    </button>
+  )
+}
+```
+
+### Usage with atomWithReset
+
+```typescript
+import { useAtom } from 'jotai'
+import { atomWithReset, useResetAtom } from 'jotai/utils'
+
+const userAtom = atomWithReset({ name: 'John', age: 30 })
+
+function UserProfile() {
+  const [user, setUser] = useAtom(userAtom)
+  const resetUser = useResetAtom(userAtom)
+  
+  return (
+    <div>
+      <input 
+        value={user.name} 
+        onChange={(e) => setUser({ ...user, name: e.target.value })} 
+      />
+      <button onClick={resetUser}>Reset to default</button>
+    </div>
+  )
+}
+```
+
+### Related APIs
+
+- [atomWithReset](/api/utils/atom-with-reset) - Create an atom that can be reset
+- [useSetAtom](/api/use-set-atom) - Set atom value without subscribing to updates
+- [RESET](/api/utils/reset) - The RESET symbol used to reset atoms

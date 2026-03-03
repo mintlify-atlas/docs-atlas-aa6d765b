@@ -1,0 +1,252 @@
+---
+title: Vite Setup
+description: How to use Jotai with Vite
+---
+
+Jotai works perfectly with Vite. This guide shows you how to enhance your development experience using Vite-specific plugins.
+
+## Quick Start
+
+<Steps>
+  <Step title="Create Vite project">
+    ```bash
+    npm create vite@latest my-app -- --template react-ts
+    cd my-app
+    ```
+  </Step>
+
+  <Step title="Install Jotai">
+    ```bash
+    npm install jotai
+    ```
+  </Step>
+
+  <Step title="Install Babel plugins (optional)">
+    For better DX, install Jotai's Babel plugins:
+
+    ```bash
+    npm install --save-dev jotai-babel
+    ```
+  </Step>
+</Steps>
+
+## Babel Plugin Configuration
+
+Enhance your developer experience with Jotai's Babel plugins:
+
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import jotaiDebugLabel from 'jotai-babel/plugin-debug-label'
+import jotaiReactRefresh from 'jotai-babel/plugin-react-refresh'
+
+export default defineConfig({
+  plugins: [
+    react({ 
+      babel: { 
+        plugins: [jotaiDebugLabel, jotaiReactRefresh] 
+      } 
+    }),
+  ],
+})
+```
+
+### What These Plugins Do
+
+#### debug-label Plugin
+
+Automatically adds debug labels to atoms for better DevTools experience:
+
+```ts
+// You write:
+const countAtom = atom(0)
+
+// Plugin transforms to:
+const countAtom = atom(0)
+countAtom.debugLabel = 'countAtom'
+```
+
+#### react-refresh Plugin
+
+Enables React Fast Refresh for atoms, preserving state during hot module replacement:
+
+```ts
+// Atoms maintain their state when you edit code
+const countAtom = atom(0)
+// Edit this file, count value persists!
+```
+
+## TypeScript Configuration
+
+Ensure your `tsconfig.json` is configured for optimal Jotai usage:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+```
+
+## Example App Structure
+
+```
+my-vite-app/
+├── src/
+│   ├── atoms/
+│   │   └── index.ts
+│   ├── components/
+│   │   └── Counter.tsx
+│   ├── App.tsx
+│   └── main.tsx
+├── vite.config.ts
+└── package.json
+```
+
+### Example Files
+
+```ts
+// src/atoms/index.ts
+import { atom } from 'jotai'
+
+export const countAtom = atom(0)
+export const doubleCountAtom = atom((get) => get(countAtom) * 2)
+```
+
+```tsx
+// src/components/Counter.tsx
+import { useAtom } from 'jotai'
+import { countAtom, doubleCountAtom } from '../atoms'
+
+export function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  const [doubleCount] = useAtom(doubleCountAtom)
+  
+  return (
+    <div>
+      <h1>Count: {count}</h1>
+      <h2>Double: {doubleCount}</h2>
+      <button onClick={() => setCount(c => c + 1)}>
+        Increment
+      </button>
+    </div>
+  )
+}
+```
+
+```tsx
+// src/App.tsx
+import { Counter } from './components/Counter'
+
+function App() {
+  return (
+    <div className="App">
+      <Counter />
+    </div>
+  )
+}
+
+export default App
+```
+
+## Development
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+With the Babel plugins configured, you'll get:
+- Automatic debug labels in React DevTools
+- Fast Refresh that preserves atom state
+- Better debugging experience
+
+## Production Build
+
+Build for production:
+
+```bash
+npm run build
+```
+
+The Babel plugins are safe for production - debug labels are useful for debugging production issues.
+
+## Environment Variables
+
+Access environment variables in atoms:
+
+```ts
+import { atom } from 'jotai'
+
+const apiUrlAtom = atom(import.meta.env.VITE_API_URL)
+const isDevelopmentAtom = atom(import.meta.env.DEV)
+```
+
+## Code Splitting
+
+Vite automatically code splits. Leverage this with Jotai:
+
+```ts
+// Lazy load atoms
+const heavyFeatureAtom = atom(async () => {
+  const module = await import('./heavy-feature')
+  return module.default
+})
+```
+
+## DevTools
+
+Use Redux DevTools with Jotai in Vite:
+
+```tsx
+import { useAtomsDevtools } from 'jotai-devtools'
+import { Provider } from 'jotai'
+
+function App() {
+  return (
+    <Provider>
+      <DevTools />
+      <YourApp />
+    </Provider>
+  )
+}
+
+function DevTools() {
+  useAtomsDevtools('demo')
+  return null
+}
+```
+
+## Tips
+
+<Tip>
+Use the Babel plugins for the best development experience. They add debug labels and enable Fast Refresh for atoms.
+</Tip>
+
+<Tip>
+Vite's fast HMR combined with Jotai's react-refresh plugin means your atom state persists across hot updates.
+</Tip>
+
+<Note>
+The `jotai-babel` plugins work in development and production. Debug labels can help debug production issues.
+</Note>

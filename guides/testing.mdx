@@ -1,0 +1,351 @@
+---
+title: Testing Strategies
+description: How to test your code using Jotai
+---
+
+Jotai follows the guiding principle: "The more your tests resemble the way your software is used, the more confidence they can give you." This guide covers testing strategies for Jotai applications.
+
+## Testing Philosophy
+
+We encourage you to:
+- Test how users interact with atoms and components
+- Treat Jotai as an implementation detail
+- Focus on behavior, not implementation
+
+## Basic Component Testing
+
+Test components using React Testing Library:
+
+```tsx
+// Counter.tsx
+import { atom, useAtom } from 'jotai'
+
+export const countAtom = atom(0)
+
+export function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(c => c + 1)}>Increment</button>
+    </div>
+  )
+}
+```
+
+```tsx
+// Counter.test.tsx
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { Counter } from './Counter'
+
+test('should increment counter', async () => {
+  render(<Counter />)
+  
+  const count = screen.getByText('Count: 0')
+  const button = screen.getByText('Increment')
+  
+  await userEvent.click(button)
+  
+  expect(count).toHaveTextContent('Count: 1')
+})
+```
+
+## Testing with Initial Values
+
+Inject initial values using `Provider` and `useHydrateAtoms`:
+
+```tsx
+import { Provider } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { countAtom, Counter } from './Counter'
+
+function HydrateAtoms({ initialValues, children }) {
+  useHydrateAtoms(initialValues)
+  return children
+}
+
+function TestProvider({ initialValues, children }) {
+  return (
+    <Provider>
+      <HydrateAtoms initialValues={initialValues}>
+        {children}
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+
+test('should not increment beyond max', async () => {
+  render(
+    <TestProvider initialValues={[[countAtom, 100]]}>
+      <Counter max={100} />
+    </TestProvider>
+  )
+  
+  const count = screen.getByText('Count: 100')
+  const button = screen.getByText('Increment')
+  
+  await userEvent.click(button)
+  
+  expect(count).toHaveTextContent('Count: 100')
+})
+```
+
+## Testing Custom Hooks
+
+Test atoms in isolation using React Hooks Testing Library:
+
+```tsx
+// countAtom.ts
+import { atom } from 'jotai'
+import { atomWithReducer } from 'jotai/utils'
+
+type Action = 'INCREASE' | 'DECREASE'
+
+const reducer = (state: number, action: Action) => {
+  switch (action) {
+    case 'INCREASE':
+      return state + 1
+    case 'DECREASE':
+      return state - 1
+    default:
+      return state
+  }
+}
+
+export const countAtom = atomWithReducer(0, reducer)
+```
+
+```tsx
+// countAtom.test.ts
+import { renderHook, act } from '@testing-library/react'
+import { useAtom } from 'jotai'
+import { countAtom } from './countAtom'
+
+test('should increase counter', () => {
+  const { result } = renderHook(() => useAtom(countAtom))
+  
+  act(() => {
+    result.current[1]('INCREASE')
+  })
+  
+  expect(result.current[0]).toBe(1)
+})
+
+test('should decrease counter', () => {
+  const { result } = renderHook(() => useAtom(countAtom))
+  
+  act(() => {
+    result.current[1]('DECREASE')
+  })
+  
+  expect(result.current[0]).toBe(-1)
+})
+```
+
+## Testing Async Atoms
+
+Test async atoms with Suspense:
+
+```tsx
+import { Suspense } from 'react'
+import { render, screen, waitFor } from '@testing-library/react'
+import { atom, useAtom } from 'jotai'
+
+const asyncAtom = atom(async () => {
+  const response = await fetch('/api/data')
+  return response.json()
+})
+
+function AsyncComponent() {
+  const [data] = useAtom(asyncAtom)
+  return <div>Data: {data.value}</div>
+}
+
+test('should load async data', async () => {
+  render(
+    <Suspense fallback={<div>Loading...</div>}>
+      <AsyncComponent />
+    </Suspense>
+  )
+  
+  expect(screen.getByText('Loading...')).toBeInTheDocument()
+  
+  await waitFor(() => {
+    expect(screen.getByText('Data: 42')).toBeInTheDocument()
+  })
+})
+```
+
+## Testing with Multiple Atoms
+
+Test components that use multiple atoms:
+
+```tsx
+import { atom, useAtom } from 'jotai'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+
+const firstNameAtom = atom('John')
+const lastNameAtom = atom('Doe')
+const fullNameAtom = atom(
+  (get) => `${get(firstNameAtom)} ${get(lastNameAtom)}`
+)
+
+function NameForm() {
+  const [firstName, setFirstName] = useAtom(firstNameAtom)
+  const [lastName, setLastName] = useAtom(lastNameAtom)
+  const [fullName] = useAtom(fullNameAtom)
+  
+  return (
+    <div>
+      <input
+        value={firstName}
+        onChange={(e) => setFirstName(e.target.value)}
+        placeholder="First name"
+      />
+      <input
+        value={lastName}
+        onChange={(e) => setLastName(e.target.value)}
+        placeholder="Last name"
+      />
+      <p>Full name: {fullName}</p>
+    </div>
+  )
+}
+
+test('should display full name', async () => {
+  render(<NameForm />)
+  
+  const firstName = screen.getByPlaceholderText('First name')
+  const lastName = screen.getByPlaceholderText('Last name')
+  
+  await userEvent.clear(firstName)
+  await userEvent.type(firstName, 'Jane')
+  
+  await userEvent.clear(lastName)
+  await userEvent.type(lastName, 'Smith')
+  
+  expect(screen.getByText('Full name: Jane Smith')).toBeInTheDocument()
+})
+```
+
+## Testing React Native
+
+Test React Native components with Jotai:
+
+```tsx
+import { render, fireEvent } from '@testing-library/react-native'
+import { Provider } from 'jotai'
+import { Counter } from './Counter'
+
+test('should increment counter', () => {
+  const { getByText } = render(
+    <Provider>
+      <Counter />
+    </Provider>
+  )
+  
+  const counter = getByText('0')
+  const button = getByText('Increment')
+  
+  fireEvent.press(button)
+  
+  expect(counter.props.children.toString()).toEqual('1')
+})
+```
+
+## Testing Atom Families
+
+Test components using atom families:
+
+```tsx
+import { atomFamily } from 'jotai/utils'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+
+const todoAtomFamily = atomFamily((id: string) =>
+  atom({ id, text: '', completed: false })
+)
+
+function TodoItem({ id }: { id: string }) {
+  const [todo, setTodo] = useAtom(todoAtomFamily(id))
+  
+  return (
+    <div>
+      <input
+        value={todo.text}
+        onChange={(e) => setTodo({ ...todo, text: e.target.value })}
+      />
+      <input
+        type="checkbox"
+        checked={todo.completed}
+        onChange={(e) => setTodo({ ...todo, completed: e.target.checked })}
+      />
+    </div>
+  )
+}
+
+test('should update todo', async () => {
+  render(<TodoItem id="1" />)
+  
+  const input = screen.getByRole('textbox')
+  const checkbox = screen.getByRole('checkbox')
+  
+  await userEvent.type(input, 'Buy milk')
+  expect(input).toHaveValue('Buy milk')
+  
+  await userEvent.click(checkbox)
+  expect(checkbox).toBeChecked()
+})
+```
+
+## Mocking Atoms
+
+Mock atoms for testing:
+
+```tsx
+import { Provider } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+import { userAtom } from './atoms'
+
+const mockUser = { id: '1', name: 'Test User' }
+
+function TestWrapper({ children }) {
+  useHydrateAtoms([[userAtom, mockUser]])
+  return children
+}
+
+test('should display user', () => {
+  render(
+    <Provider>
+      <TestWrapper>
+        <UserProfile />
+      </TestWrapper>
+    </Provider>
+  )
+  
+  expect(screen.getByText('Test User')).toBeInTheDocument()
+})
+```
+
+## Tips
+
+<Tip>
+Test user behavior, not implementation. Focus on what users see and do, not the internal atom structure.
+</Tip>
+
+<Tip>
+Use `Provider` and `useHydrateAtoms` to inject test data into atoms without exposing them globally.
+</Tip>
+
+<Tip>
+When testing async atoms, always wrap with `Suspense` and use `waitFor` from Testing Library.
+</Tip>
+
+<Note>
+Treat Jotai as an implementation detail. Your tests should pass even if you switch to a different state management solution.
+</Note>

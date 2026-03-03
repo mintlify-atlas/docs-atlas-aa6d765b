@@ -1,0 +1,208 @@
+---
+title: useHydrateAtoms
+description: Initialize atom values during SSR or on mount
+---
+
+## useHydrateAtoms
+
+Hydrates atom values, typically used for server-side rendering (SSR) or initializing atoms with values on mount.
+
+### Import
+
+```typescript
+import { useHydrateAtoms } from 'jotai/utils'
+```
+
+### Signature
+
+```typescript
+function useHydrateAtoms<
+  T extends (readonly [AnyWritableAtom, ...unknown[]])[]
+>(
+  values: InferAtomTuples<T>,
+  options?: Options
+): void
+
+function useHydrateAtoms<T extends Map<AnyWritableAtom, unknown>>(
+  values: T,
+  options?: Options
+): void
+
+function useHydrateAtoms<
+  T extends Iterable<readonly [AnyWritableAtom, ...unknown[]]>
+>(
+  values: InferAtomTuples<T>,
+  options?: Options
+): void
+```
+
+### Parameters
+
+<ParamField path="values" type="Iterable<[WritableAtom, ...args]>" required>
+  An iterable of atom-value pairs to hydrate. Can be:
+  - Array of tuples: `[[atom1, value1], [atom2, value2]]`
+  - Map: `new Map([[atom1, value1], [atom2, value2]])`
+  - Any iterable of tuples
+</ParamField>
+
+<ParamField path="options" type="Options">
+  Optional configuration:
+  - `store`: Specify a custom store to use
+  - `dangerouslyForceHydrate`: If `true`, forces re-hydration even if atoms were already hydrated
+</ParamField>
+
+### Returns
+
+`void` - This hook does not return a value.
+
+### Usage
+
+```typescript
+import { atom, useAtomValue } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const countAtom = atom(0)
+const nameAtom = atom('John')
+
+function App({ initialCount, initialName }) {
+  useHydrateAtoms([
+    [countAtom, initialCount],
+    [nameAtom, initialName]
+  ])
+  
+  return <Counter />
+}
+
+function Counter() {
+  const count = useAtomValue(countAtom)
+  const name = useAtomValue(nameAtom)
+  
+  return <div>{name}: {count}</div>
+}
+```
+
+### Server-Side Rendering (SSR)
+
+```typescript
+import { atom, useAtomValue } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const userAtom = atom<User | null>(null)
+const postsAtom = atom<Post[]>([])
+
+interface PageProps {
+  user: User
+  posts: Post[]
+}
+
+function Page({ user, posts }: PageProps) {
+  // Hydrate atoms with server-side data
+  useHydrateAtoms([
+    [userAtom, user],
+    [postsAtom, posts]
+  ])
+  
+  return (
+    <div>
+      <UserProfile />
+      <PostList />
+    </div>
+  )
+}
+
+function UserProfile() {
+  const user = useAtomValue(userAtom)
+  return <div>{user?.name}</div>
+}
+
+function PostList() {
+  const posts = useAtomValue(postsAtom)
+  return <ul>{posts.map(post => <li key={post.id}>{post.title}</li>)}</ul>
+}
+```
+
+### Using with Map
+
+```typescript
+import { atom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const atom1 = atom(0)
+const atom2 = atom('hello')
+const atom3 = atom(false)
+
+function App({ initialValues }) {
+  const hydrateMap = new Map([
+    [atom1, initialValues.count],
+    [atom2, initialValues.message],
+    [atom3, initialValues.flag]
+  ])
+  
+  useHydrateAtoms(hydrateMap)
+  
+  return <Content />
+}
+```
+
+### Force Re-hydration
+
+```typescript
+import { atom, useAtomValue } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const configAtom = atom({ theme: 'light' })
+
+function App({ config }) {
+  // Force re-hydration even if already hydrated
+  useHydrateAtoms(
+    [[configAtom, config]],
+    { dangerouslyForceHydrate: true }
+  )
+  
+  return <Theme />
+}
+```
+
+### Hydration Only Happens Once
+
+By default, atoms are only hydrated once. Subsequent calls to `useHydrateAtoms` with the same atoms will be ignored:
+
+```typescript
+function Component({ data }) {
+  // First render: hydrates with data
+  useHydrateAtoms([[myAtom, data]])
+  
+  // Re-renders with different data: ignored (atom already hydrated)
+  // Use dangerouslyForceHydrate: true to override this behavior
+  
+  return <Child />
+}
+```
+
+### TypeScript Type Safety
+
+The hook ensures type safety between atoms and their values:
+
+```typescript
+import { atom } from 'jotai'
+import { useHydrateAtoms } from 'jotai/utils'
+
+const countAtom = atom(0)
+const nameAtom = atom('')
+
+function App() {
+  useHydrateAtoms([
+    [countAtom, 42],        // OK
+    [nameAtom, 'Alice'],    // OK
+    // [countAtom, 'wrong'], // TypeScript error
+  ])
+  
+  return <div>App</div>
+}
+```
+
+### Related APIs
+
+- [Provider](/api/core/provider) - Provide a Jotai store to components
+- [useStore](/api/hooks/use-store) - Access the current store
+- [useSetAtom](/api/use-set-atom) - Set atom values imperatively

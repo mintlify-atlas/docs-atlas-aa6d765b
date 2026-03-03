@@ -1,0 +1,162 @@
+---
+title: loadable
+description: API reference for loadable utility
+---
+
+<Warning>
+  `loadable` is **deprecated** in favor of `unwrap`. It will be removed in v3.
+</Warning>
+
+`loadable` wraps an atom to convert async values and errors into a loadable state object.
+
+## Import
+
+```typescript
+import { loadable } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+function loadable<Value>(
+  anAtom: Atom<Value>,
+): Atom<Loadable<Value>>
+
+type Loadable<Value> =
+  | { state: 'loading' }
+  | { state: 'hasError'; error: unknown }
+  | { state: 'hasData'; data: Awaited<Value> }
+```
+
+## Parameters
+
+<ParamField path="anAtom" type="Atom<Value>" required>
+  The atom to wrap. Can be synchronous or asynchronous
+</ParamField>
+
+## Return Value
+
+Returns a read-only atom that contains a loadable state object with one of three states:
+- `{ state: 'loading' }` - Async value is pending
+- `{ state: 'hasError', error }` - Async value threw an error
+- `{ state: 'hasData', data }` - Value is available
+
+## Migration to unwrap
+
+```typescript
+// Old (deprecated)
+import { loadable } from 'jotai/utils'
+const loadableAtom = loadable(asyncAtom)
+
+// New (recommended)
+import { unwrap } from 'jotai/utils'
+
+function loadable<Value>(anAtom: Atom<Value>) {
+  const LOADING = { state: 'loading' as const }
+  const unwrappedAtom = unwrap(anAtom, () => LOADING)
+  return atom((get) => {
+    try {
+      const data = get(unwrappedAtom)
+      if (data === LOADING) {
+        return LOADING
+      }
+      return { state: 'hasData' as const, data }
+    } catch (error) {
+      return { state: 'hasError' as const, error }
+    }
+  })
+}
+```
+
+## Usage Example (Deprecated)
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { loadable } from 'jotai/utils'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  if (!response.ok) throw new Error('Failed to fetch')
+  return response.json()
+})
+
+const userLoadableAtom = loadable(userAtom)
+
+function UserProfile() {
+  const [userLoadable] = useAtom(userLoadableAtom)
+
+  if (userLoadable.state === 'loading') {
+    return <div>Loading...</div>
+  }
+
+  if (userLoadable.state === 'hasError') {
+    return <div>Error: {userLoadable.error.message}</div>
+  }
+
+  // userLoadable.state === 'hasData'
+  return <div>User: {userLoadable.data.name}</div>
+}
+```
+
+## Pattern Matching
+
+```typescript
+import { loadable } from 'jotai/utils'
+
+const dataLoadableAtom = loadable(asyncDataAtom)
+
+function DataDisplay() {
+  const [data] = useAtom(dataLoadableAtom)
+
+  return (
+    <div>
+      {data.state === 'loading' && <Spinner />}
+      {data.state === 'hasError' && <ErrorMessage error={data.error} />}
+      {data.state === 'hasData' && <DataView data={data.data} />}
+    </div>
+  )
+}
+```
+
+## Helper Function
+
+```typescript
+import { loadable, type Loadable } from 'jotai/utils'
+
+function matchLoadable<T, R>(
+  loadable: Loadable<T>,
+  handlers: {
+    loading: () => R
+    hasError: (error: unknown) => R
+    hasData: (data: Awaited<T>) => R
+  }
+): R {
+  switch (loadable.state) {
+    case 'loading':
+      return handlers.loading()
+    case 'hasError':
+      return handlers.hasError(loadable.error)
+    case 'hasData':
+      return handlers.hasData(loadable.data)
+  }
+}
+
+function Component() {
+  const [loadable] = useAtom(loadableAtom)
+
+  return matchLoadable(loadable, {
+    loading: () => <div>Loading...</div>,
+    hasError: (error) => <div>Error: {String(error)}</div>,
+    hasData: (data) => <div>Data: {data}</div>,
+  })
+}
+```
+
+## Notes
+
+- **Deprecated**: Use `unwrap` instead for new code
+- Provides a way to handle async states without Suspense
+- Does not throw or suspend, making it useful for optional error boundaries
+- The loadable atom never throws; errors are captured in the state
+- TypeScript discriminated union makes pattern matching type-safe
+- See the migration guide above for userland implementation using `unwrap`

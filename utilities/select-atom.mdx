@@ -1,0 +1,265 @@
+---
+title: selectAtom
+description: Create a derived atom that selects a slice of another atom's value
+---
+
+`selectAtom` creates a read-only derived atom that selects and memoizes a slice of another atom's value. It only re-renders when the selected slice changes according to the equality function.
+
+## Signature
+
+```ts
+function selectAtom<Value, Slice>(
+  anAtom: Atom<Value>,
+  selector: (value: Value, prevSlice?: Slice) => Slice,
+  equalityFn?: (a: Slice, b: Slice) => boolean
+): Atom<Slice>
+```
+
+<ParamField path="anAtom" type="Atom<Value>" required>
+  The source atom to select from
+</ParamField>
+
+<ParamField path="selector" type="(value: Value, prevSlice?: Slice) => Slice" required>
+  Function that extracts the slice from the atom's value
+</ParamField>
+
+<ParamField path="equalityFn" type="(a: Slice, b: Slice) => boolean">
+  Custom equality function to determine if the slice changed. Defaults to `Object.is`
+</ParamField>
+
+## Usage
+
+### Basic field selection
+
+```tsx
+import { selectAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const userAtom = atom({
+  name: 'John',
+  age: 30,
+  email: 'john@example.com'
+})
+
+const nameAtom = selectAtom(userAtom, (user) => user.name)
+
+function UserName() {
+  const [name] = useAtom(nameAtom)
+  // Only re-renders when name changes, not when age or email change
+  return <div>{name}</div>
+}
+```
+
+### Selecting multiple fields
+
+```tsx
+import { selectAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const userAtom = atom({
+  name: 'John',
+  age: 30,
+  email: 'john@example.com',
+  address: '123 Main St'
+})
+
+const contactAtom = selectAtom(
+  userAtom,
+  (user) => ({ name: user.name, email: user.email }),
+  (a, b) => a.name === b.name && a.email === b.email
+)
+
+function ContactInfo() {
+  const [contact] = useAtom(contactAtom)
+  // Only re-renders when name or email change
+  return (
+    <div>
+      <div>{contact.name}</div>
+      <div>{contact.email}</div>
+    </div>
+  )
+}
+```
+
+### Array filtering
+
+```tsx
+import { selectAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const todosAtom = atom([
+  { id: 1, text: 'Buy milk', completed: false },
+  { id: 2, text: 'Walk dog', completed: true },
+  { id: 3, text: 'Write code', completed: false }
+])
+
+const activeTodosAtom = selectAtom(
+  todosAtom,
+  (todos) => todos.filter(todo => !todo.completed)
+)
+
+function ActiveTodos() {
+  const [activeTodos] = useAtom(activeTodosAtom)
+  
+  return (
+    <ul>
+      {activeTodos.map(todo => (
+        <li key={todo.id}>{todo.text}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### Deep equality for objects
+
+```tsx
+import { selectAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+import isEqual from 'lodash/isEqual'
+
+const stateAtom = atom({
+  user: { name: 'John', age: 30 },
+  settings: { theme: 'dark', notifications: true }
+})
+
+const userAtom = selectAtom(
+  stateAtom,
+  (state) => state.user,
+  isEqual // Deep equality comparison
+)
+
+function UserProfile() {
+  const [user] = useAtom(userAtom)
+  // Only re-renders when user object actually changes
+  return <div>{user.name}, {user.age}</div>
+}
+```
+
+### Computed selection
+
+```tsx
+import { selectAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const cartAtom = atom([
+  { id: 1, name: 'Apple', price: 1.5, quantity: 3 },
+  { id: 2, name: 'Banana', price: 0.8, quantity: 5 },
+  { id: 3, name: 'Orange', price: 1.2, quantity: 2 }
+])
+
+const totalAtom = selectAtom(
+  cartAtom,
+  (cart) => cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+)
+
+function CartTotal() {
+  const [total] = useAtom(totalAtom)
+  
+  return <div>Total: ${total.toFixed(2)}</div>
+}
+```
+
+### Using previous slice
+
+```tsx
+import { selectAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const countersAtom = atom({
+  a: 0,
+  b: 0,
+  c: 0
+})
+
+// Track how counter 'a' changed compared to last selection
+const counterADeltaAtom = selectAtom(
+  countersAtom,
+  (counters, prevSlice) => {
+    const current = counters.a
+    const previous = prevSlice?.value ?? current
+    return {
+      value: current,
+      delta: current - previous
+    }
+  }
+)
+
+function CounterAWithDelta() {
+  const [counterA] = useAtom(counterADeltaAtom)
+  
+  return (
+    <div>
+      <div>Current: {counterA.value}</div>
+      <div>Change: {counterA.delta > 0 ? '+' : ''}{counterA.delta}</div>
+    </div>
+  )
+}
+```
+
+### Selecting from async atoms
+
+```tsx
+import { selectAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+import { Suspense } from 'react'
+
+const userDataAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+const userNameAtom = selectAtom(userDataAtom, (data) => data.name)
+
+function UserName() {
+  const [name] = useAtom(userNameAtom)
+  return <div>{name}</div>
+}
+
+function App() {
+  return (
+    <Suspense fallback="Loading...">
+      <UserName />
+    </Suspense>
+  )
+}
+```
+
+## Features
+
+- **Memoization**: Only updates when the selected slice changes
+- **Custom equality**: Use custom equality functions for complex comparisons
+- **Performance**: Prevents unnecessary re-renders by comparing only the slice
+- **Type-safe**: Full TypeScript support with proper type inference
+- **Previous value access**: Selector can access the previous slice value
+
+## Notes
+
+- The default equality function is `Object.is` (reference equality)
+- For object/array selections, consider using deep equality functions like `lodash/isEqual`
+- The selector function is called every time the source atom updates
+- Only the equality check determines if consumers re-render
+- The previous slice value is available in the selector on subsequent calls
+- Works with both sync and async atoms
+
+## Performance comparison
+
+Without `selectAtom`:
+```tsx
+// This re-renders whenever ANY property changes
+function UserName() {
+  const [user] = useAtom(userAtom)
+  return <div>{user.name}</div>
+}
+```
+
+With `selectAtom`:
+```tsx
+// This only re-renders when name changes
+const nameAtom = selectAtom(userAtom, (user) => user.name)
+
+function UserName() {
+  const [name] = useAtom(nameAtom)
+  return <div>{name}</div>
+}
+```

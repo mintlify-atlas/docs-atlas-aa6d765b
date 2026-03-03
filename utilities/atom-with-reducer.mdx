@@ -1,0 +1,232 @@
+---
+title: atomWithReducer
+description: Create an atom with reducer-like state updates
+---
+
+`atomWithReducer` creates a writable atom that updates its state using a reducer function, similar to React's `useReducer` hook.
+
+## Signature
+
+```ts
+function atomWithReducer<Value, Action>(
+  initialValue: Value,
+  reducer: (value: Value, action: Action) => Value
+): WritableAtom<Value, [Action], void>
+```
+
+<ParamField path="initialValue" type="Value" required>
+  The initial value of the atom
+</ParamField>
+
+<ParamField path="reducer" type="(value: Value, action: Action) => Value" required>
+  The reducer function that takes the current value and an action, and returns the next value
+</ParamField>
+
+## Usage
+
+### Counter with actions
+
+```tsx
+import { atomWithReducer } from 'jotai/utils'
+import { useAtom } from 'jotai'
+
+type Action = { type: 'increment' } | { type: 'decrement' } | { type: 'reset' }
+
+const countReducer = (count: number, action: Action) => {
+  switch (action.type) {
+    case 'increment':
+      return count + 1
+    case 'decrement':
+      return count - 1
+    case 'reset':
+      return 0
+    default:
+      return count
+  }
+}
+
+const countAtom = atomWithReducer(0, countReducer)
+
+function Counter() {
+  const [count, dispatch] = useAtom(countAtom)
+  
+  return (
+    <div>
+      <div>Count: {count}</div>
+      <button onClick={() => dispatch({ type: 'increment' })}>+</button>
+      <button onClick={() => dispatch({ type: 'decrement' })}>-</button>
+      <button onClick={() => dispatch({ type: 'reset' })}>Reset</button>
+    </div>
+  )
+}
+```
+
+### Todo list with actions
+
+```tsx
+import { atomWithReducer } from 'jotai/utils'
+import { useAtom } from 'jotai'
+
+interface Todo {
+  id: number
+  text: string
+  completed: boolean
+}
+
+type TodoAction =
+  | { type: 'add'; text: string }
+  | { type: 'remove'; id: number }
+  | { type: 'toggle'; id: number }
+  | { type: 'edit'; id: number; text: string }
+
+const todoReducer = (todos: Todo[], action: TodoAction): Todo[] => {
+  switch (action.type) {
+    case 'add':
+      return [
+        ...todos,
+        { id: Date.now(), text: action.text, completed: false }
+      ]
+    case 'remove':
+      return todos.filter(todo => todo.id !== action.id)
+    case 'toggle':
+      return todos.map(todo =>
+        todo.id === action.id
+          ? { ...todo, completed: !todo.completed }
+          : todo
+      )
+    case 'edit':
+      return todos.map(todo =>
+        todo.id === action.id
+          ? { ...todo, text: action.text }
+          : todo
+      )
+    default:
+      return todos
+  }
+}
+
+const todosAtom = atomWithReducer<Todo[], TodoAction>([], todoReducer)
+
+function TodoList() {
+  const [todos, dispatch] = useAtom(todosAtom)
+  const [input, setInput] = useState('')
+  
+  const handleAdd = () => {
+    if (input.trim()) {
+      dispatch({ type: 'add', text: input })
+      setInput('')
+    }
+  }
+  
+  return (
+    <div>
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+      />
+      <button onClick={handleAdd}>Add</button>
+      
+      <ul>
+        {todos.map(todo => (
+          <li key={todo.id}>
+            <input
+              type="checkbox"
+              checked={todo.completed}
+              onChange={() => dispatch({ type: 'toggle', id: todo.id })}
+            />
+            <span style={{ textDecoration: todo.completed ? 'line-through' : 'none' }}>
+              {todo.text}
+            </span>
+            <button onClick={() => dispatch({ type: 'remove', id: todo.id })}>
+              Delete
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+### Complex state management
+
+```tsx
+import { atomWithReducer } from 'jotai/utils'
+import { useAtom } from 'jotai'
+
+interface State {
+  user: { name: string; email: string } | null
+  loading: boolean
+  error: string | null
+}
+
+type Action =
+  | { type: 'login/start' }
+  | { type: 'login/success'; user: { name: string; email: string } }
+  | { type: 'login/error'; error: string }
+  | { type: 'logout' }
+
+const authReducer = (state: State, action: Action): State => {
+  switch (action.type) {
+    case 'login/start':
+      return { ...state, loading: true, error: null }
+    case 'login/success':
+      return { user: action.user, loading: false, error: null }
+    case 'login/error':
+      return { ...state, loading: false, error: action.error }
+    case 'logout':
+      return { user: null, loading: false, error: null }
+    default:
+      return state
+  }
+}
+
+const authAtom = atomWithReducer<State, Action>(
+  { user: null, loading: false, error: null },
+  authReducer
+)
+
+function Auth() {
+  const [auth, dispatch] = useAtom(authAtom)
+  
+  const handleLogin = async () => {
+    dispatch({ type: 'login/start' })
+    try {
+      const user = await login() // Your login function
+      dispatch({ type: 'login/success', user })
+    } catch (error) {
+      dispatch({ type: 'login/error', error: error.message })
+    }
+  }
+  
+  return (
+    <div>
+      {auth.loading && <p>Loading...</p>}
+      {auth.error && <p>Error: {auth.error}</p>}
+      {auth.user ? (
+        <div>
+          <p>Welcome, {auth.user.name}!</p>
+          <button onClick={() => dispatch({ type: 'logout' })}>Logout</button>
+        </div>
+      ) : (
+        <button onClick={handleLogin}>Login</button>
+      )}
+    </div>
+  )
+}
+```
+
+## Features
+
+- **Reducer pattern**: Familiar pattern from React's `useReducer`
+- **Type-safe actions**: Full TypeScript support with discriminated unions
+- **Predictable updates**: All state changes go through the reducer
+- **Testable**: Easy to test reducer logic in isolation
+
+## Notes
+
+- The write function of the atom accepts actions (not state values)
+- The reducer should be a pure function
+- TypeScript will infer action types when using discriminated unions
+- The atom can be read like any other atom to get the current state

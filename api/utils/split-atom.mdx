@@ -1,0 +1,308 @@
+---
+title: splitAtom
+description: API reference for splitAtom utility
+---
+
+`splitAtom` creates an atom that splits an array atom into an array of atoms for each item, enabling efficient item-level updates.
+
+## Import
+
+```typescript
+import { splitAtom } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+// Writable array atom
+function splitAtom<Item, Key>(
+  arrAtom: WritableAtom<Item[], [Item[]], void>,
+  keyExtractor?: (item: Item) => Key,
+): WritableAtom<PrimitiveAtom<Item>[], [SplitAtomAction<Item>], void>
+
+// Read-only array atom
+function splitAtom<Item, Key>(
+  arrAtom: Atom<Item[]>,
+  keyExtractor?: (item: Item) => Key,
+): Atom<Atom<Item>[]>
+
+type SplitAtomAction<Item> =
+  | { type: 'remove'; atom: PrimitiveAtom<Item> }
+  | { type: 'insert'; value: Item; before?: PrimitiveAtom<Item> }
+  | { type: 'move'; atom: PrimitiveAtom<Item>; before?: PrimitiveAtom<Item> }
+```
+
+## Parameters
+
+<ParamField path="arrAtom" type="WritableAtom<Item[], [Item[]], void> | Atom<Item[]>" required>
+  The source array atom to split into individual item atoms
+</ParamField>
+
+<ParamField path="keyExtractor" type="(item: Item) => Key">
+  Optional function to extract a stable key from each item. If not provided, uses array index. Important for maintaining atom identity across re-orders
+</ParamField>
+
+## Return Value
+
+Returns an atom containing an array of atoms, where:
+- Each atom represents one item in the source array
+- For writable arrays, supports actions to insert, remove, or move items
+- Item atoms are cached based on their key
+
+## Usage Example
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { splitAtom } from 'jotai/utils'
+
+const todosAtom = atom([
+  { id: 1, text: 'Buy milk', completed: false },
+  { id: 2, text: 'Walk dog', completed: false },
+])
+
+const todoAtomsAtom = splitAtom(todosAtom)
+
+function TodoItem({ todoAtom }: { todoAtom: PrimitiveAtom<Todo> }) {
+  const [todo, setTodo] = useAtom(todoAtom)
+
+  return (
+    <li>
+      <input
+        type="checkbox"
+        checked={todo.completed}
+        onChange={() => setTodo({ ...todo, completed: !todo.completed })}
+      />
+      {todo.text}
+    </li>
+  )
+}
+
+function TodoList() {
+  const [todoAtoms] = useAtom(todoAtomsAtom)
+
+  return (
+    <ul>
+      {todoAtoms.map((todoAtom) => (
+        <TodoItem key={`${todoAtom}`} todoAtom={todoAtom} />
+      ))}
+    </ul>
+  )
+}
+```
+
+## With Key Extractor
+
+```typescript
+import { atom } from 'jotai'
+import { splitAtom } from 'jotai/utils'
+
+interface Todo {
+  id: number
+  text: string
+  completed: boolean
+}
+
+const todosAtom = atom<Todo[]>([])
+
+// Use id as key for stable atom identity
+const todoAtomsAtom = splitAtom(todosAtom, (todo) => todo.id)
+
+function TodoList() {
+  const [todoAtoms] = useAtom(todoAtomsAtom)
+
+  return (
+    <ul>
+      {todoAtoms.map((todoAtom) => (
+        <TodoItem key={`${todoAtom}`} todoAtom={todoAtom} />
+      ))}
+    </ul>
+  )
+}
+```
+
+## Insert, Remove, Move Operations
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { splitAtom } from 'jotai/utils'
+
+const itemsAtom = atom(['A', 'B', 'C'])
+const itemAtomsAtom = splitAtom(itemsAtom)
+
+function ItemList() {
+  const [itemAtoms, dispatch] = useAtom(itemAtomsAtom)
+
+  const addItem = () => {
+    dispatch({ type: 'insert', value: 'New Item' })
+  }
+
+  const addItemBefore = (beforeAtom: PrimitiveAtom<string>) => {
+    dispatch({ type: 'insert', value: 'Inserted', before: beforeAtom })
+  }
+
+  const removeItem = (atom: PrimitiveAtom<string>) => {
+    dispatch({ type: 'remove', atom })
+  }
+
+  const moveToEnd = (atom: PrimitiveAtom<string>) => {
+    dispatch({ type: 'move', atom }) // No 'before' means move to end
+  }
+
+  const moveBefore = (atom: PrimitiveAtom<string>, beforeAtom: PrimitiveAtom<string>) => {
+    dispatch({ type: 'move', atom, before: beforeAtom })
+  }
+
+  return (
+    <div>
+      <button onClick={addItem}>Add Item</button>
+      <ul>
+        {itemAtoms.map((itemAtom, index) => (
+          <Item
+            key={`${itemAtom}`}
+            itemAtom={itemAtom}
+            onRemove={() => removeItem(itemAtom)}
+            onMoveToEnd={() => moveToEnd(itemAtom)}
+          />
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+## Optimized Todo List
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { splitAtom } from 'jotai/utils'
+
+interface Todo {
+  id: number
+  text: string
+  completed: boolean
+}
+
+const todosAtom = atom<Todo[]>([])
+const todoAtomsAtom = splitAtom(todosAtom, (todo) => todo.id)
+
+function TodoItem({
+  todoAtom,
+  onRemove,
+}: {
+  todoAtom: PrimitiveAtom<Todo>
+  onRemove: () => void
+}) {
+  const [todo, setTodo] = useAtom(todoAtom)
+
+  return (
+    <li>
+      <input
+        type="checkbox"
+        checked={todo.completed}
+        onChange={() => setTodo({ ...todo, completed: !todo.completed })}
+      />
+      <input
+        value={todo.text}
+        onChange={(e) => setTodo({ ...todo, text: e.target.value })}
+      />
+      <button onClick={onRemove}>Delete</button>
+    </li>
+  )
+}
+
+function TodoList() {
+  const [todoAtoms, dispatch] = useAtom(todoAtomsAtom)
+
+  const addTodo = () => {
+    dispatch({
+      type: 'insert',
+      value: {
+        id: Date.now(),
+        text: 'New todo',
+        completed: false,
+      },
+    })
+  }
+
+  return (
+    <div>
+      <button onClick={addTodo}>Add Todo</button>
+      <ul>
+        {todoAtoms.map((todoAtom) => (
+          <TodoItem
+            key={`${todoAtom}`}
+            todoAtom={todoAtom}
+            onRemove={() => dispatch({ type: 'remove', atom: todoAtom })}
+          />
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+## Drag and Drop Reordering
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { splitAtom } from 'jotai/utils'
+
+const itemsAtom = atom(['Item 1', 'Item 2', 'Item 3'])
+const itemAtomsAtom = splitAtom(itemsAtom)
+
+function DraggableItem({
+  itemAtom,
+  onDrop,
+}: {
+  itemAtom: PrimitiveAtom<string>
+  onDrop: (atom: PrimitiveAtom<string>) => void
+}) {
+  const [item] = useAtom(itemAtom)
+
+  return (
+    <li
+      draggable
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={() => onDrop(itemAtom)}
+    >
+      {item}
+    </li>
+  )
+}
+
+function DraggableList() {
+  const [itemAtoms, dispatch] = useAtom(itemAtomsAtom)
+  const [draggedAtom, setDraggedAtom] = React.useState<PrimitiveAtom<string> | null>(null)
+
+  const handleDrop = (beforeAtom: PrimitiveAtom<string>) => {
+    if (draggedAtom && draggedAtom !== beforeAtom) {
+      dispatch({ type: 'move', atom: draggedAtom, before: beforeAtom })
+    }
+    setDraggedAtom(null)
+  }
+
+  return (
+    <ul>
+      {itemAtoms.map((itemAtom) => (
+        <div
+          key={`${itemAtom}`}
+          onDragStart={() => setDraggedAtom(itemAtom)}
+        >
+          <DraggableItem itemAtom={itemAtom} onDrop={handleDrop} />
+        </div>
+      ))}
+    </ul>
+  )
+}
+```
+
+## Notes
+
+- Each item atom is cached based on its key, ensuring stable references across re-renders
+- Without a key extractor, atoms are keyed by index, which means reordering will not maintain atom identity
+- With a key extractor, atoms maintain identity even when items are reordered
+- Only components using a specific item atom re-render when that item changes
+- The `remove`, `insert`, and `move` actions are only available for writable array atoms
+- When inserting without a `before` parameter, the item is appended to the end
+- When moving without a `before` parameter, the item is moved to the end
+- Provides significant performance benefits for large lists with frequent item updates

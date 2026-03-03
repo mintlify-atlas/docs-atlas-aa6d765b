@@ -1,0 +1,181 @@
+---
+title: Comparison
+description: Compare Jotai with other state management solutions
+---
+
+Jotai was born to solve extra re-render issues in React. An extra re-render is when the render process produces the same UI result, where users won't see any differences.
+
+## Comparison Table
+
+| Feature | Jotai | Redux | Zustand | Recoil | Context API |
+|---------|-------|-------|---------|--------|-------------|
+| **Bundle Size** | ~3KB | ~10KB | ~1KB | ~14KB | Built-in |
+| **API Style** | Atomic | Centralized | Centralized | Atomic | Built-in |
+| **Learning Curve** | Low | High | Low | Medium | Low |
+| **Boilerplate** | Minimal | High | Minimal | Low | Medium |
+| **TypeScript** | Excellent | Good | Excellent | Good | Good |
+| **DevTools** | Yes | Excellent | Yes | Yes | Limited |
+| **Async Support** | Native | Middleware | Manual | Native | Manual |
+| **Suspense** | Yes | No | No | Yes | Manual |
+| **Code Splitting** | Excellent | Good | Good | Excellent | N/A |
+| **Outside React** | Yes (Store API) | Yes | Yes | No | No |
+
+## Design Principles
+
+Jotai has two core principles:
+
+- **Primitive**: Its basic API is simple, like `useState`
+- **Flexible**: Atoms can derive from other atoms and form a graph. Atoms can also be updated by any arbitrary atom, allowing abstraction of complex state models
+
+## Context API
+
+To tackle extra re-renders with React context (`useContext` + `useState`), one would require many contexts and face some issues:
+
+- **Provider hell**: Your root component likely has many context providers, which is technically okay, but sometimes leads to deeply nested provider trees
+- **Dynamic addition/deletion**: Adding a new context at runtime is not very nice, because you need to add a new provider and its children will be re-mounted
+
+Traditionally, a top-down solution to this is to use a selector function. The [use-context-selector](https://github.com/dai-shi/use-context-selector) library is one example. The issue with this approach is the selector function needs to return referentially equal values to prevent re-renders, which often requires memoization techniques.
+
+Jotai takes a bottom-up approach with the atomic model, inspired by Recoil. You can build state by combining atoms and optimize renders based on atom dependency, avoiding the need for memoization.
+
+### Usage Difference
+
+Here's how Context API usage compares to Jotai:
+
+```jsx
+// 1. useState local state
+const Component = () => {
+  const [state, setState] = useState(0)
+}
+
+// 2. Lift local state up and share via context
+const StateContext = createContext()
+const Parent = ({ children }) => {
+  return (
+    <StateContext.Provider value={useState(0)}>
+      {children}
+    </StateContext.Provider>
+  )
+}
+const Component = () => {
+  const [state, setState] = useContext(StateContext)
+}
+
+// 3. Multiple states and contexts (Provider hell)
+const State1Context = createContext()
+const State2Context = createContext()
+const Parent = ({ children }) => (
+  <State1Context.Provider value={useState(0)}>
+    <State2Context.Provider value={useState(0)}>
+      {children}
+    </State2Context.Provider>
+  </State1Context.Provider>
+)
+```
+
+With Jotai, this simplifies to:
+
+```jsx
+import { Provider, atom, useAtom } from 'jotai'
+
+const atom1 = atom(0)
+const atom2 = atom(0)
+
+// Optional: you can use Provider just like useContext,
+// but if you only need one, you can omit it and Jotai
+// will use a default one (Provider-less mode)
+const Parent = ({ children }) => {
+  return <Provider>{children}</Provider>
+}
+
+const Component1 = () => {
+  const [state, setState] = useAtom(atom1)
+}
+
+const Component2 = () => {
+  const [state, setState] = useAtom(atom2)
+}
+```
+
+## Zustand
+
+### Name
+
+- Jotai means "state" in Japanese
+- Zustand means "state" in German
+
+### Analogy
+
+- Jotai is like Recoil
+- Zustand is like Redux
+
+### Where State Resides
+
+Both have stores that can exist either at module level or at context level:
+
+- **Jotai** is designed to be context first, and module second
+- **Zustand** is designed to be module first, and context second
+
+### How to Structure State
+
+- **Jotai** state consists of atoms (bottom-up)
+- **Zustand** state is one object (top-down)
+
+### Technical Difference
+
+The major difference is the state model. Zustand is a single store (although you could create multiple separate stores), while Jotai consists of primitive atoms and allows composing them together. In this sense, it's a matter of programming mental model.
+
+### When to Use Which
+
+- If you need a replacement for `useState` + `useContext`, Jotai fits well
+- If you want a simple module state, Zustand fits well
+- If code splitting is important, Jotai should perform well
+- If you prefer Redux devtools, Zustand is good to go
+- If you want to make use of Suspense, Jotai is the one
+
+## Recoil
+
+### Developer
+
+- **Jotai** is developed with collective work by a few developers in Poimandres (formerly react-spring) org
+- **Recoil** is developed by a team at Facebook
+
+### Basis
+
+- **Jotai** is focusing on primitive APIs for easy learning, and it's unopinionated (the same philosophy as Zustand)
+- **Recoil** is all-in-one, and it has various cache strategies
+
+### Technical Difference
+
+- **Jotai** depends on atom object referential identities
+- **Recoil** depends on atom string keys
+
+### When to Use Which
+
+- If you want to learn something new, either should work
+- If you like Zustand, Jotai would also be pleasant
+- If you need React Context alternatives, Jotai comes with enough features
+- If you need to read and write atoms outside React, Jotai provides store API
+- If you would try to create a new library, Jotai might give good primitives
+- Otherwise, both are pretty similar about the general goals and basic techniques, so please try both and share your feedback with us
+
+## Redux
+
+### State Model
+
+- **Redux**: Single centralized store with reducers and actions
+- **Jotai**: Distributed atomic state that can be composed
+
+### Boilerplate
+
+- **Redux**: Requires action types, action creators, reducers, and often middleware setup
+- **Jotai**: Minimal API - just create atoms and use them
+
+### When to Use Which
+
+- If you have a large existing Redux codebase, stick with Redux
+- If you need extensive middleware ecosystem, Redux has more options
+- If you want simpler API with less boilerplate, Jotai is better
+- If you're building a new project and want modern React patterns, Jotai fits well
+- If your team is already familiar with Redux patterns, that may be easier
+- If you want better TypeScript inference out of the box, Jotai excels

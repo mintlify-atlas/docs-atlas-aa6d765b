@@ -1,0 +1,285 @@
+---
+title: unwrap
+description: API reference for unwrap utility
+---
+
+`unwrap` creates an atom that unwraps async values and provides a fallback while loading.
+
+## Import
+
+```typescript
+import { unwrap } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+// Read-only with default undefined fallback
+function unwrap<Value>(
+  anAtom: Atom<Value>,
+): Atom<Awaited<Value> | undefined>
+
+// Read-only with custom fallback
+function unwrap<Value, PendingValue>(
+  anAtom: Atom<Value>,
+  fallback: (prev?: Awaited<Value>) => PendingValue,
+): Atom<Awaited<Value> | PendingValue>
+
+// Writable with default undefined fallback
+function unwrap<Value, Args extends unknown[], Result>(
+  anAtom: WritableAtom<Value, Args, Result>,
+): WritableAtom<Awaited<Value> | undefined, Args, Result>
+
+// Writable with custom fallback
+function unwrap<Value, Args extends unknown[], Result, PendingValue>(
+  anAtom: WritableAtom<Value, Args, Result>,
+  fallback: (prev?: Awaited<Value>) => PendingValue,
+): WritableAtom<Awaited<Value> | PendingValue, Args, Result>
+```
+
+## Parameters
+
+<ParamField path="anAtom" type="Atom<Value> | WritableAtom<Value, Args, Result>" required>
+  The atom to unwrap. Can be synchronous or asynchronous
+</ParamField>
+
+<ParamField path="fallback" type="(prev?: Awaited<Value>) => PendingValue">
+  Optional function that returns a fallback value while the promise is pending. Receives the previous resolved value if available. Defaults to returning `undefined`
+</ParamField>
+
+## Return Value
+
+Returns an atom that:
+- Returns the resolved value when the promise completes
+- Returns the fallback value while the promise is pending
+- Preserves write functionality for writable atoms
+- Does not suspend or throw
+
+## Usage Example
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { unwrap } from 'jotai/utils'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+const userUnwrappedAtom = unwrap(userAtom, () => ({ name: 'Loading...' }))
+
+function UserProfile() {
+  const [user] = useAtom(userUnwrappedAtom)
+  // No suspense, shows fallback while loading
+  return <div>User: {user.name}</div>
+}
+```
+
+## Default Undefined Fallback
+
+```typescript
+import { unwrap } from 'jotai/utils'
+
+const asyncAtom = atom(async () => {
+  await delay(1000)
+  return 'Hello'
+})
+
+const unwrappedAtom = unwrap(asyncAtom)
+// Type: Atom<string | undefined>
+
+function Component() {
+  const [value] = useAtom(unwrappedAtom)
+  // value is undefined while loading, then 'Hello'
+  return <div>{value ?? 'Loading...'}</div>
+}
+```
+
+## With Previous Value
+
+```typescript
+import { unwrap } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const refreshCounterAtom = atom(0)
+
+const dataAtom = atom(async (get) => {
+  get(refreshCounterAtom) // dependency for refresh
+  const response = await fetch('/api/data')
+  return response.json()
+})
+
+const unwrappedDataAtom = unwrap(
+  dataAtom,
+  (prev) => prev ?? { status: 'loading' }
+)
+
+function DataDisplay() {
+  const [data] = useAtom(unwrappedDataAtom)
+  const [, refresh] = useAtom(refreshCounterAtom)
+
+  // Shows previous data while refreshing
+  return (
+    <div>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+      <button onClick={() => refresh((c) => c + 1)}>Refresh</button>
+    </div>
+  )
+}
+```
+
+## Writable Unwrapped Atom
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { unwrap } from 'jotai/utils'
+
+const asyncCountAtom = atom(
+  async () => {
+    await delay(100)
+    return 0
+  },
+  async (get, set, newValue: number) => {
+    await delay(100)
+    set(asyncCountAtom, Promise.resolve(newValue))
+  }
+)
+
+const unwrappedCountAtom = unwrap(asyncCountAtom, () => 0)
+
+function Counter() {
+  const [count, setCount] = useAtom(unwrappedCountAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+    </div>
+  )
+}
+```
+
+## Loading States
+
+```typescript
+import { unwrap } from 'jotai/utils'
+
+const LOADING = { state: 'loading' as const }
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+const userStateAtom = unwrap(userAtom, () => LOADING)
+
+function UserProfile() {
+  const [user] = useAtom(userStateAtom)
+
+  if (user === LOADING) {
+    return <div>Loading user...</div>
+  }
+
+  return <div>Welcome, {user.name}!</div>
+}
+```
+
+## Skeleton UI Pattern
+
+```typescript
+import { unwrap } from 'jotai/utils'
+
+interface Post {
+  id: number
+  title: string
+  body: string
+}
+
+const postsAtom = atom<Promise<Post[]>>(async () => {
+  const response = await fetch('/api/posts')
+  return response.json()
+})
+
+const unwrappedPostsAtom = unwrap(
+  postsAtom,
+  (prev) => prev ?? Array(3).fill({ id: 0, title: '...', body: '...' })
+)
+
+function PostList() {
+  const [posts] = useAtom(unwrappedPostsAtom)
+
+  return (
+    <ul>
+      {posts.map((post, i) => (
+        <li key={post.id || i}>
+          <h3>{post.title}</h3>
+          <p>{post.body}</p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+## Implementing loadable
+
+```typescript
+import { atom } from 'jotai'
+import { unwrap } from 'jotai/utils'
+
+type Loadable<T> =
+  | { state: 'loading' }
+  | { state: 'hasData'; data: T }
+  | { state: 'hasError'; error: unknown }
+
+function loadable<Value>(anAtom: Atom<Value>) {
+  const LOADING = { state: 'loading' as const }
+  const unwrappedAtom = unwrap(anAtom, () => LOADING)
+  return atom((get) => {
+    try {
+      const data = get(unwrappedAtom)
+      if (data === LOADING) {
+        return LOADING
+      }
+      return { state: 'hasData' as const, data }
+    } catch (error) {
+      return { state: 'hasError' as const, error }
+    }
+  })
+}
+```
+
+## Error Handling
+
+```typescript
+import { unwrap } from 'jotai/utils'
+
+const dataAtom = atom(async () => {
+  const response = await fetch('/api/data')
+  if (!response.ok) throw new Error('Failed to fetch')
+  return response.json()
+})
+
+const unwrappedDataAtom = unwrap(dataAtom, () => null)
+
+function DataComponent() {
+  try {
+    const [data] = useAtom(unwrappedDataAtom)
+    if (data === null) return <div>Loading...</div>
+    return <div>{JSON.stringify(data)}</div>
+  } catch (error) {
+    // Errors are still thrown and can be caught
+    return <div>Error: {error.message}</div>
+  }
+}
+```
+
+## Notes
+
+- The unwrapped atom does not suspend; it returns the fallback value instead
+- Errors from the async atom are still thrown when reading the unwrapped atom
+- The fallback function receives the previous resolved value, useful for showing stale data
+- When the promise resolves, the atom updates to the resolved value
+- Writable atoms preserve their write functionality
+- More flexible than the deprecated `loadable` utility
+- Useful for implementing custom loading states without Suspense

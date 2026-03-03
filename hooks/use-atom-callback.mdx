@@ -1,0 +1,294 @@
+---
+title: useAtomCallback
+description: Create imperative read/write callbacks for atoms
+---
+
+`useAtomCallback` is a utility hook that creates imperative callbacks with access to atom getter and setter functions. It's useful for reading or writing atoms outside of React's render cycle.
+
+## When to use it
+
+Use `useAtomCallback` when you need to:
+- Read or write atoms in event handlers without causing re-renders
+- Perform imperative operations that need access to current atom values
+- Create callbacks that read multiple atoms without subscribing to them
+
+## Signature
+
+```ts
+function useAtomCallback<Result, Args extends unknown[]>(
+  callback: (get: Getter, set: Setter, ...args: Args) => Result,
+  options?: Options
+): (...args: Args) => Result
+```
+
+### Parameters
+
+- `callback`: A function that receives `get` and `set` functions plus any custom arguments
+  - `get`: Function to read atom values (same as in atom read function)
+  - `set`: Function to write atom values (same as in atom write function)
+  - `...args`: Custom arguments passed when calling the callback
+- `options`: Optional configuration object
+  - `store`: Custom store to use (defaults to the store from Provider)
+
+### Returns
+
+A stable callback function that can be called with the specified arguments.
+
+## Basic Usage
+
+```tsx
+import { atom } from 'jotai'
+import { useAtomCallback } from 'jotai/react/utils'
+import { useCallback } from 'react'
+
+const countAtom = atom(0)
+const nameAtom = atom('John')
+
+function Component() {
+  const readAtoms = useAtomCallback(
+    useCallback((get) => {
+      const count = get(countAtom)
+      const name = get(nameAtom)
+      return { count, name }
+    }, [])
+  )
+  
+  const handleClick = () => {
+    const values = readAtoms()
+    console.log('Current values:', values)
+  }
+  
+  return <button onClick={handleClick}>Log Values</button>
+}
+```
+
+This component reads atoms without subscribing to them, so it won't re-render when the atoms change.
+
+## Writing Atoms
+
+```tsx
+import { atom } from 'jotai'
+import { useAtomCallback } from 'jotai/react/utils'
+import { useCallback } from 'react'
+
+const countAtom = atom(0)
+
+function Component() {
+  const incrementAndLog = useAtomCallback(
+    useCallback((get, set) => {
+      const current = get(countAtom)
+      const next = current + 1
+      set(countAtom, next)
+      console.log(`Incremented from ${current} to ${next}`)
+      return next
+    }, [])
+  )
+  
+  return (
+    <button onClick={incrementAndLog}>
+      Increment and Log
+    </button>
+  )
+}
+```
+
+## With Custom Arguments
+
+```tsx
+import { atom } from 'jotai'
+import { useAtomCallback } from 'jotai/react/utils'
+import { useCallback } from 'react'
+
+const itemsAtom = atom<string[]>([])
+
+function Component() {
+  const addItem = useAtomCallback(
+    useCallback((get, set, newItem: string) => {
+      const items = get(itemsAtom)
+      set(itemsAtom, [...items, newItem])
+    }, [])
+  )
+  
+  return (
+    <button onClick={() => addItem('New item')}>
+      Add Item
+    </button>
+  )
+}
+```
+
+## Reading Multiple Atoms
+
+```tsx
+import { atom } from 'jotai'
+import { useAtomCallback } from 'jotai/react/utils'
+import { useCallback } from 'react'
+
+const firstNameAtom = atom('John')
+const lastNameAtom = atom('Doe')
+const ageAtom = atom(30)
+
+function Component() {
+  const saveToLocalStorage = useAtomCallback(
+    useCallback((get) => {
+      const data = {
+        firstName: get(firstNameAtom),
+        lastName: get(lastNameAtom),
+        age: get(ageAtom)
+      }
+      localStorage.setItem('userData', JSON.stringify(data))
+    }, [])
+  )
+  
+  return <button onClick={saveToLocalStorage}>Save</button>
+}
+```
+
+## Async Callbacks
+
+```tsx
+import { atom } from 'jotai'
+import { useAtomCallback } from 'jotai/react/utils'
+import { useCallback } from 'react'
+
+const userAtom = atom<User | null>(null)
+const loadingAtom = atom(false)
+
+function Component() {
+  const fetchUser = useAtomCallback(
+    useCallback(async (get, set, userId: string) => {
+      set(loadingAtom, true)
+      try {
+        const response = await fetch(`/api/users/${userId}`)
+        const user = await response.json()
+        set(userAtom, user)
+        return user
+      } finally {
+        set(loadingAtom, false)
+      }
+    }, [])
+  )
+  
+  return (
+    <button onClick={() => fetchUser('123')}>
+      Load User
+    </button>
+  )
+}
+```
+
+## Comparison with Other Hooks
+
+```tsx
+// useAtomValue - subscribes to atom (causes re-renders)
+const count = useAtomValue(countAtom)
+
+// useSetAtom - only writes atoms
+const setCount = useSetAtom(countAtom)
+
+// useAtomCallback - reads/writes without subscription (no re-renders)
+const doSomething = useAtomCallback(
+  useCallback((get, set) => {
+    const count = get(countAtom) // Read without subscribing
+    set(countAtom, count + 1)     // Write
+  }, [])
+)
+```
+
+## Debugging and Logging
+
+```tsx
+import { useAtomCallback } from 'jotai/react/utils'
+import { useCallback } from 'react'
+
+function DebugButton() {
+  const logAllAtoms = useAtomCallback(
+    useCallback((get) => {
+      console.log('App State:', {
+        user: get(userAtom),
+        settings: get(settingsAtom),
+        items: get(itemsAtom)
+      })
+    }, [])
+  )
+  
+  return <button onClick={logAllAtoms}>Debug State</button>
+}
+```
+
+## Form Submission Example
+
+```tsx
+import { atom } from 'jotai'
+import { useAtomCallback } from 'jotai/react/utils'
+import { useCallback } from 'react'
+
+const nameAtom = atom('')
+const emailAtom = atom('')
+const messageAtom = atom('')
+
+function ContactForm() {
+  const [name, setName] = useAtom(nameAtom)
+  const [email, setEmail] = useAtom(emailAtom)
+  const [message, setMessage] = useAtom(messageAtom)
+  
+  const handleSubmit = useAtomCallback(
+    useCallback(async (get, set) => {
+      const formData = {
+        name: get(nameAtom),
+        email: get(emailAtom),
+        message: get(messageAtom)
+      }
+      
+      await fetch('/api/contact', {
+        method: 'POST',
+        body: JSON.stringify(formData)
+      })
+      
+      // Clear form
+      set(nameAtom, '')
+      set(emailAtom, '')
+      set(messageAtom, '')
+    }, [])
+  )
+  
+  return (
+    <form onSubmit={(e) => {
+      e.preventDefault()
+      handleSubmit()
+    }}>
+      <input value={name} onChange={(e) => setName(e.target.value)} />
+      <input value={email} onChange={(e) => setEmail(e.target.value)} />
+      <textarea value={message} onChange={(e) => setMessage(e.target.value)} />
+      <button type="submit">Submit</button>
+    </form>
+  )
+}
+```
+
+## TypeScript
+
+`useAtomCallback` is fully typed:
+
+```tsx
+import { useAtomCallback } from 'jotai/react/utils'
+import { useCallback } from 'react'
+
+const numberAtom = atom(0)
+const stringAtom = atom('hello')
+
+function Component() {
+  // Return type and argument types are inferred
+  const myCallback = useAtomCallback(
+    useCallback((get, set, multiplier: number): number => {
+      const num = get(numberAtom) // number
+      const str = get(stringAtom)  // string
+      const result = num * multiplier
+      set(numberAtom, result)
+      return result
+    }, [])
+  )
+  
+  const result = myCallback(5) // number
+}
+```

@@ -1,0 +1,284 @@
+---
+title: Migration Guide (v1 to v2)
+description: Guide for migrating from Jotai v1 to v2
+---
+
+Jotai v2 introduces several breaking changes along with powerful new features. This guide will help you migrate from v1 to v2.
+
+## Overview
+
+Jotai v1 was released in June 2022. After gathering feedback from the community and with React's proposal for first-class promise support, Jotai v2 brings a refined API with breaking changes and new capabilities.
+
+**RFC:** [GitHub Discussion #1514](https://github.com/pmndrs/jotai/discussions/1514)
+
+## New Features
+
+### Vanilla Library
+
+Jotai now provides vanilla (non-React) functions and React functions separately through alternate entry points:
+
+```js
+import { atom } from 'jotai/vanilla'
+import { useAtom } from 'jotai/react'
+
+// Since v2.0.0, you can also import from 'jotai'
+import { atom } from 'jotai' // same as 'jotai/vanilla'
+import { useAtom } from 'jotai' // same as 'jotai/react'
+```
+
+**Note:** If you're not using ESM, prefer using `jotai/vanilla` for better tree shaking.
+
+### Store API
+
+Jotai now exposes a store interface for directly manipulating atom values:
+
+```js
+import { createStore } from 'jotai'
+
+const store = createStore()
+store.set(fooAtom, 'foo')
+
+console.log(store.get(fooAtom)) // prints "foo"
+
+const unsub = store.sub(fooAtom, () => {
+  console.log('fooAtom value in store changed')
+})
+// Call unsub() to unsubscribe
+```
+
+You can also create your own React Context to pass a store.
+
+### Flexible Write Function
+
+The write function now accepts multiple arguments and can return a value:
+
+```js
+atom(
+  (get) => get(...),
+  (get, set, arg1, arg2, ...) => {
+    // ...
+    return someValue
+  }
+)
+```
+
+## Breaking Changes
+
+### Async Atoms Are No Longer Special
+
+Async atoms are now just normal atoms with promise values. The `get` function in atom read functions **does not resolve promises**.
+
+However, the `useAtom` hook continues to resolve promises for convenience.
+
+Some utilities like `splitAtom` expect sync atoms and won't work with async atoms directly.
+
+#### Migration Example
+
+**v1 API:**
+```js
+const asyncAtom = atom(async () => 'hello')
+const derivedAtom = atom((get) => get(asyncAtom).toUpperCase())
+```
+
+**v2 API:**
+```js
+const asyncAtom = atom(async () => 'hello')
+const derivedAtom = atom(async (get) => (await get(asyncAtom)).toUpperCase())
+// or
+const derivedAtom = atom((get) => get(asyncAtom).then((x) => x.toUpperCase()))
+```
+
+If you're using TypeScript, the type system will guide you to add `await` or `.then()` where needed.
+
+### Writable Atom Type (TypeScript)
+
+The `WritableAtom` type signature has changed:
+
+**v1:**
+```ts
+WritableAtom<Value, Arg, Result extends void | Promise<void>>
+```
+
+**v2:**
+```ts
+WritableAtom<Value, Args extends unknown[], Result>
+```
+
+In general, avoid using the `WritableAtom` type directly. Let TypeScript infer types from your atom definitions.
+
+### Removed Functions
+
+#### Provider's `initialValues` Prop
+
+**v1 API:**
+```jsx
+const countAtom = atom(0)
+
+<Provider initialValues={[[countAtom, 1]]}>
+  {/* ... */}
+</Provider>
+```
+
+**v2 API:**
+```jsx
+import { useHydrateAtoms } from 'jotai/react/utils'
+
+const countAtom = atom(0)
+
+const HydrateAtoms = ({ initialValues, children }) => {
+  useHydrateAtoms(initialValues)
+  return children
+}
+
+<Provider>
+  <HydrateAtoms initialValues={[[countAtom, 1]]}>
+    {/* ... */}
+  </HydrateAtoms>
+</Provider>
+```
+
+#### Provider's `scope` Prop
+
+**v1 API:**
+```jsx
+const myScope = Symbol()
+
+// Parent component
+<Provider scope={myScope}>
+  {/* ... */}
+</Provider>
+
+// Child component
+useAtom(someAtom, myScope)
+```
+
+**v2 API:**
+```jsx
+import { createContext } from 'react'
+import { createStore } from 'jotai'
+
+const MyContext = createContext()
+const store = createStore()
+
+// Parent component
+<MyContext.Provider value={store}>
+  {/* ... */}
+</MyContext.Provider>
+
+// Child component
+const store = useContext(MyContext)
+useAtom(someAtom, { store })
+```
+
+#### `abortableAtom` Util
+
+The abort signal functionality is now included by default in atoms.
+
+**v1 API:**
+```js
+const asyncAtom = abortableAtom(async (get, { signal }) => {
+  // ...
+})
+```
+
+**v2 API:**
+```js
+const asyncAtom = atom(async (get, { signal }) => {
+  // ...
+})
+```
+
+#### `waitForAll` Util
+
+Use native `Promise.all()` instead.
+
+**v1 API:**
+```js
+const allAtom = waitForAll([fooAtom, barAtom])
+```
+
+**v2 API:**
+```js
+const allAtom = atom((get) => Promise.all([get(fooAtom), get(barAtom)]))
+```
+
+**Warning:** Creating atoms in render functions can cause infinite loops. See [the docs](../core/atom.mdx#note-about-creating-an-atom-in-render-function) for details.
+
+### `splitAtom` with Async Atoms
+
+The `splitAtom` utility only accepts sync atoms. Unwrap async atoms before passing them.
+
+**v1 API:**
+```js
+const splittedAtom = splitAtom(asyncArrayAtom)
+```
+
+**v2 API:**
+```js
+import { unwrap } from 'jotai/utils'
+
+const splittedAtom = splitAtom(unwrap(asyncArrayAtom, () => []))
+```
+
+Alternatively, use `loadable` for more control over loading states, or use the atoms-in-atom pattern for Suspense support.
+
+**Resources:**
+- [Discussion #1615](https://github.com/pmndrs/jotai/discussions/1615)
+- [jotai-tanstack-query #21](https://github.com/jotaijs/jotai-tanstack-query/issues/21)
+- [Discussion #1751](https://github.com/pmndrs/jotai/discussions/1751)
+
+## Additional Changes
+
+### Utils
+
+#### `atomWithStorage`
+
+The `delayInit` option is removed and is now the default behavior.
+
+`atomWithStorage` will always render `initialValue` on the first render, and the stored value (if any) on subsequent renders. This behavior differs from v1.
+
+**See:** [Discussion #1737](https://github.com/pmndrs/jotai/discussions/1737)
+
+#### `useHydrateAtoms`
+
+This hook can only accept writable atoms.
+
+### Import Paths
+
+The v2 API is available from alternate entry points for library authors and non-React users:
+
+- `jotai/vanilla` - Core atom functions without React
+- `jotai/vanilla/utils` - Vanilla utilities
+- `jotai/react` - React hooks
+- `jotai/react/utils` - React utilities
+
+```js
+// Available since v1.11.0
+import { atom } from 'jotai/vanilla'
+import { useAtom } from 'jotai/react'
+
+// Available since v2.0.0
+import { atom } from 'jotai' // same as 'jotai/vanilla'
+import { useAtom } from 'jotai' // same as 'jotai/react'
+```
+
+## Migration Checklist
+
+- [ ] Update async atom read functions to use `await` or `.then()`
+- [ ] Replace `Provider` `initialValues` with `useHydrateAtoms`
+- [ ] Replace `Provider` `scope` with custom context and store
+- [ ] Remove `abortableAtom` wrapper (use plain `atom`)
+- [ ] Replace `waitForAll` with `Promise.all()`
+- [ ] Unwrap async atoms before passing to `splitAtom`
+- [ ] Update TypeScript types if using `WritableAtom` directly
+- [ ] Update `atomWithStorage` usage if relying on v1 initialization behavior
+- [ ] Review and update import paths for better tree shaking
+
+## Getting Help
+
+If you encounter issues during migration:
+
+- Check the [GitHub Discussions](https://github.com/pmndrs/jotai/discussions)
+- Join the [Discord community](https://discord.gg/poimandres)
+- Review the [official documentation](https://jotai.org)
+- Open an issue on [GitHub](https://github.com/pmndrs/jotai/issues)

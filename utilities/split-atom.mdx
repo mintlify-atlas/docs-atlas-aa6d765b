@@ -1,0 +1,381 @@
+---
+title: splitAtom
+description: Split an array atom into individual atoms for each element
+---
+
+`splitAtom` creates an atom that splits an array atom into an array of atoms, where each atom represents an individual element. This is useful for rendering lists where each item can be independently updated.
+
+## Signature
+
+```ts
+function splitAtom<Item, Key>(
+  arrAtom: WritableAtom<Item[], [Item[]], void>,
+  keyExtractor?: (item: Item) => Key
+): WritableAtom<PrimitiveAtom<Item>[], [SplitAtomAction<Item>], void>
+
+function splitAtom<Item, Key>(
+  arrAtom: Atom<Item[]>,
+  keyExtractor?: (item: Item) => Key
+): Atom<Atom<Item>[]>
+
+type SplitAtomAction<Item> =
+  | { type: 'remove'; atom: PrimitiveAtom<Item> }
+  | { type: 'insert'; value: Item; before?: PrimitiveAtom<Item> }
+  | { type: 'move'; atom: PrimitiveAtom<Item>; before?: PrimitiveAtom<Item> }
+```
+
+<ParamField path="arrAtom" type="Atom<Item[]>" required>
+  The source array atom to split
+</ParamField>
+
+<ParamField path="keyExtractor" type="(item: Item) => Key">
+  Function to extract a unique key from each item. Defaults to using the array index
+</ParamField>
+
+## Usage
+
+### Basic todo list
+
+```tsx
+import { splitAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const todosAtom = atom([
+  { id: 1, text: 'Buy milk', completed: false },
+  { id: 2, text: 'Walk dog', completed: true }
+])
+
+const todoAtomsAtom = splitAtom(todosAtom)
+
+function TodoItem({ todoAtom }: { todoAtom: Atom<typeof todosAtom>[0] }) {
+  const [todo, setTodo] = useAtom(todoAtom)
+  
+  return (
+    <div>
+      <input
+        type="checkbox"
+        checked={todo.completed}
+        onChange={(e) => setTodo({ ...todo, completed: e.target.checked })}
+      />
+      <span>{todo.text}</span>
+    </div>
+  )
+}
+
+function TodoList() {
+  const [todoAtoms] = useAtom(todoAtomsAtom)
+  
+  return (
+    <div>
+      {todoAtoms.map((todoAtom) => (
+        <TodoItem key={`${todoAtom}`} todoAtom={todoAtom} />
+      ))}
+    </div>
+  )
+}
+```
+
+### With key extractor
+
+```tsx
+import { splitAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+interface Todo {
+  id: number
+  text: string
+  completed: boolean
+}
+
+const todosAtom = atom<Todo[]>([])
+
+// Use id as the key for better performance and stability
+const todoAtomsAtom = splitAtom(todosAtom, (todo) => todo.id)
+
+function TodoItem({ todoAtom }: { todoAtom: PrimitiveAtom<Todo> }) {
+  const [todo, setTodo] = useAtom(todoAtom)
+  
+  return (
+    <div>
+      <input
+        value={todo.text}
+        onChange={(e) => setTodo({ ...todo, text: e.target.value })}
+      />
+    </div>
+  )
+}
+
+function TodoList() {
+  const [todoAtoms] = useAtom(todoAtomsAtom)
+  
+  return (
+    <div>
+      {todoAtoms.map((todoAtom) => (
+        <TodoItem key={`${todoAtom}`} todoAtom={todoAtom} />
+      ))}
+    </div>
+  )
+}
+```
+
+### Removing items
+
+```tsx
+import { splitAtom } from 'jotai/utils'
+import { atom, useAtom, useSetAtom } from 'jotai'
+
+const todosAtom = atom([
+  { id: 1, text: 'Buy milk', completed: false }
+])
+
+const todoAtomsAtom = splitAtom(todosAtom)
+
+function TodoItem({ 
+  todoAtom, 
+  remove 
+}: { 
+  todoAtom: PrimitiveAtom<Todo>
+  remove: () => void
+}) {
+  const [todo] = useAtom(todoAtom)
+  
+  return (
+    <div>
+      <span>{todo.text}</span>
+      <button onClick={remove}>Delete</button>
+    </div>
+  )
+}
+
+function TodoList() {
+  const [todoAtoms, dispatch] = useAtom(todoAtomsAtom)
+  
+  return (
+    <div>
+      {todoAtoms.map((todoAtom) => (
+        <TodoItem
+          key={`${todoAtom}`}
+          todoAtom={todoAtom}
+          remove={() => dispatch({ type: 'remove', atom: todoAtom })}
+        />
+      ))}
+    </div>
+  )
+}
+```
+
+### Adding items
+
+```tsx
+import { splitAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+import { useState } from 'react'
+
+const todosAtom = atom<Todo[]>([])
+const todoAtomsAtom = splitAtom(todosAtom)
+
+function TodoList() {
+  const [todoAtoms, dispatch] = useAtom(todoAtomsAtom)
+  const [input, setInput] = useState('')
+  
+  const handleAdd = () => {
+    if (input.trim()) {
+      dispatch({
+        type: 'insert',
+        value: { id: Date.now(), text: input, completed: false }
+      })
+      setInput('')
+    }
+  }
+  
+  return (
+    <div>
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+      />
+      <button onClick={handleAdd}>Add</button>
+      
+      {todoAtoms.map((todoAtom) => (
+        <TodoItem key={`${todoAtom}`} todoAtom={todoAtom} />
+      ))}
+    </div>
+  )
+}
+```
+
+### Inserting at specific position
+
+```tsx
+import { splitAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const todosAtom = atom<Todo[]>([])
+const todoAtomsAtom = splitAtom(todosAtom)
+
+function TodoItem({ todoAtom, insertBefore }: { 
+  todoAtom: PrimitiveAtom<Todo>
+  insertBefore: () => void
+}) {
+  const [todo] = useAtom(todoAtom)
+  
+  return (
+    <div>
+      <span>{todo.text}</span>
+      <button onClick={insertBefore}>Insert before</button>
+    </div>
+  )
+}
+
+function TodoList() {
+  const [todoAtoms, dispatch] = useAtom(todoAtomsAtom)
+  
+  return (
+    <div>
+      {todoAtoms.map((todoAtom) => (
+        <TodoItem
+          key={`${todoAtom}`}
+          todoAtom={todoAtom}
+          insertBefore={() => dispatch({
+            type: 'insert',
+            value: { id: Date.now(), text: 'New todo', completed: false },
+            before: todoAtom
+          })}
+        />
+      ))}
+    </div>
+  )
+}
+```
+
+### Moving items (drag and drop)
+
+```tsx
+import { splitAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const todosAtom = atom<Todo[]>([])
+const todoAtomsAtom = splitAtom(todosAtom)
+
+function TodoItem({ 
+  todoAtom,
+  moveToTop,
+  moveBefore
+}: { 
+  todoAtom: PrimitiveAtom<Todo>
+  moveToTop: () => void
+  moveBefore: (target: PrimitiveAtom<Todo>) => void
+}) {
+  const [todo] = useAtom(todoAtom)
+  
+  return (
+    <div>
+      <span>{todo.text}</span>
+      <button onClick={moveToTop}>Move to top</button>
+    </div>
+  )
+}
+
+function TodoList() {
+  const [todoAtoms, dispatch] = useAtom(todoAtomsAtom)
+  
+  return (
+    <div>
+      {todoAtoms.map((todoAtom) => (
+        <TodoItem
+          key={`${todoAtom}`}
+          todoAtom={todoAtom}
+          moveToTop={() => dispatch({
+            type: 'move',
+            atom: todoAtom,
+            before: todoAtoms[0] // Move to beginning
+          })}
+          moveBefore={(target) => dispatch({
+            type: 'move',
+            atom: todoAtom,
+            before: target
+          })}
+        />
+      ))}
+    </div>
+  )
+}
+```
+
+### Read-only split atom
+
+```tsx
+import { splitAtom } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const itemsAtom = atom(['Apple', 'Banana', 'Orange'])
+const itemAtomsAtom = splitAtom(itemsAtom)
+
+function Item({ itemAtom }: { itemAtom: Atom<string> }) {
+  const item = useAtomValue(itemAtom)
+  return <li>{item}</li>
+}
+
+function ItemList() {
+  const itemAtoms = useAtomValue(itemAtomsAtom)
+  
+  return (
+    <ul>
+      {itemAtoms.map((itemAtom) => (
+        <Item key={`${itemAtom}`} itemAtom={itemAtom} />
+      ))}
+    </ul>
+  )
+}
+```
+
+## Features
+
+- **Independent updates**: Each item can be updated without re-rendering other items
+- **Stable references**: Item atoms maintain stable references when using key extractor
+- **Array operations**: Built-in support for insert, remove, and move operations
+- **Type-safe**: Full TypeScript support
+- **Performance**: Only affected items re-render on updates
+
+## Actions
+
+### Remove
+
+Remove an item from the array:
+```ts
+dispatch({ type: 'remove', atom: itemAtom })
+```
+
+### Insert
+
+Insert a new item at the end:
+```ts
+dispatch({ type: 'insert', value: newItem })
+```
+
+Insert before a specific atom:
+```ts
+dispatch({ type: 'insert', value: newItem, before: targetAtom })
+```
+
+### Move
+
+Move to the end:
+```ts
+dispatch({ type: 'move', atom: itemAtom })
+```
+
+Move before a specific atom:
+```ts
+dispatch({ type: 'move', atom: itemAtom, before: targetAtom })
+```
+
+## Notes
+
+- Use a key extractor for items with unique IDs for better performance
+- Without a key extractor, indices are used as keys
+- Item atoms are memoized and reused when keys match
+- For writable array atoms, the returned atom is also writable with actions
+- For read-only array atoms, the returned atom is read-only
+- Updating an individual item atom updates the source array atom

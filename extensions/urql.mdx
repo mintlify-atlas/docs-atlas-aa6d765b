@@ -1,0 +1,175 @@
+---
+title: URQL
+description: This doc describes URQL extension.
+nav: 4.03
+keywords: urql
+---
+
+[urql](https://formidable.com/open-source/urql/) offers a toolkit for GraphQL querying, caching, and state management.
+
+From the [Overview docs](https://formidable.com/open-source/urql/docs/):
+
+> urql is a highly customizable and versatile GraphQL client with which you add on features like normalized caching as you grow. It's built to be both easy to use for newcomers to GraphQL, and extensible, to grow to support dynamic single-app applications and highly customized GraphQL infrastructure. In short, urql prioritizes usability and adaptability.
+
+[jotai-urql](https://github.com/jotaijs/jotai-urql) is a Jotai extension library for URQL. It offers a cohesive interface that incorporates all of URQL's GraphQL features, allowing you to leverage these functionalities alongside your existing Jotai state.
+
+### Install
+
+You have to install `jotai-urql`, `@urql/core` and `wonka` to use the extension.
+
+```
+npm install jotai-urql @urql/core wonka
+```
+
+### Exported functions
+
+- `atomWithQuery` for [client.query](https://formidable.com/open-source/urql/docs/api/core/#clientquery)
+- `atomWithMutation` for [client.mutation](https://formidable.com/open-source/urql/docs/api/core/#clientmutation)
+- `atomWithSubscription` for [client.subscription](https://formidable.com/open-source/urql/docs/api/core/#clientsubscription)
+
+### Basic usage
+
+#### Query:
+
+```tsx
+import { useAtom } from 'jotai'
+
+const countQueryAtom = atomWithQuery<{ count: number }>({
+  query: 'query Count { count }',
+  getClient: () => client, // This option is optional if `useRehydrateAtom([[clientAtom, client]])` is used globally
+})
+
+const Counter = () => {
+  // Will suspend until first operation result is resolved. Either with error, partial data, data
+  const [operationResult, reexecute] = useAtom(countQueryAtom)
+
+  if (operationResult.error) {
+    // This shall be handled in the parent ErrorBoundary above
+    throw operationResult.error
+  }
+
+  // You have to use optional chaining here, as data may be undefined at this point (only in case of error)
+  return <>{operationResult.data?.count}</>
+}
+```
+
+#### Mutation:
+
+```tsx
+import { useAtom } from 'jotai'
+
+const incrementMutationAtom = atomWithMutation<{ increment: number }>({
+  query: 'mutation Increment { increment }',
+})
+
+const Counter = () => {
+  const [operationResult, executeMutation] = useAtom(incrementMutationAtom)
+  return (
+    <div>
+      <button
+        onClick={() =>
+          executeMutation().then((it) => console.log(it.data?.increment))
+        }
+      >
+        Increment
+      </button>
+      <div>{operationResult.data?.increment}</div>
+    </div>
+  )
+}
+```
+
+### Simplified type of options passed to functions
+
+```tsx
+type AtomWithQueryOptions<
+  Data = unknown,
+  Variables extends AnyVariables = AnyVariables,
+> = {
+  // Supports string query, typed-document-node, document node etc.
+  query: DocumentInput<Data, Variables>
+  // Will be enforced dynamically based on generic/typed-document-node types.
+  getVariables?: (get: Getter) => Variables
+  getContext?: (get: Getter) => Partial<OperationContext>
+  getPause?: (get: Getter) => boolean
+  getClient?: (get: Getter) => Client
+}
+
+type AtomWithMutationOptions<
+  Data = unknown,
+  Variables extends AnyVariables = AnyVariables,
+> = {
+  query: DocumentInput<Data, Variables>
+  getClient?: (get: Getter) => Client
+}
+
+// Subscription type is the same as AtomWithQueryOptions
+```
+
+### Disable suspense
+
+Usage of `import { loadable } from "jotai/utils"` is preferred instead as proven more stable. However is you still want that
+here is how you do it:
+
+```tsx
+import { suspenseAtom } from 'jotai-urql'
+
+export const App = () => {
+  // We disable suspense for the entire app
+  useHydrateAtoms([[suspenseAtom, false]])
+  return <Counter />
+}
+```
+
+### Referencing the same instance of the client for both atoms and urql provider
+
+To ensure that you reference the same urqlClient object, be sure to wrap the root of your project in a `<Provider>` and initialise clientAtom with the same urqlClient value you provided to UrqlProvider.
+
+Without this step, you may end up specifying client each time when you use `atomWithQuery`. Now you can just ignore the optional `getClient` parameter, and it will use the client from the context.
+
+```jsx
+import { Suspense } from 'react'
+import { Provider } from 'jotai/react'
+import { useHydrateAtoms } from 'jotai/react/utils'
+import { clientAtom } from 'jotai-urql'
+
+import {
+  createClient,
+  cacheExchange,
+  fetchExchange,
+  Provider as UrqlProvider,
+} from 'urql'
+
+const urqlClient = createClient({
+  url: 'https://countries.trevorblades.com/',
+  exchanges: [cacheExchange, fetchExchange],
+  fetchOptions: () => {
+    return { headers: {} }
+  },
+})
+
+const HydrateAtoms = ({ children }) => {
+  useHydrateAtoms([[clientAtom, urqlClient]])
+  return children
+}
+
+export default function MyApp({ Component, pageProps }) {
+  return (
+    <UrqlProvider value={urqlClient}>
+      <Provider>
+        <HydrateAtoms>
+          <Suspense fallback="Loading...">
+            <Component {...pageProps} />
+          </Suspense>
+        </HydrateAtoms>
+      </Provider>
+    </UrqlProvider>
+  )
+}
+```
+
+### Links
+
+- [jotai-urql on GitHub](https://github.com/jotaijs/jotai-urql)
+- [jotai-urql on npm](https://www.npmjs.com/package/jotai-urql)
+- [URQL documentation](https://formidable.com/open-source/urql/)

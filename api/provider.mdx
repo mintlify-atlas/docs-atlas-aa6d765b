@@ -1,0 +1,250 @@
+---
+title: Provider
+description: Provide a scoped Jotai store to React components
+---
+
+The `Provider` component creates a store scope for atoms. All hooks under a Provider will use the same store instance, isolating atom state from other parts of the app.
+
+## Signature
+
+```typescript
+function Provider({
+  children,
+  store,
+}: {
+  children?: ReactNode
+  store?: Store
+}): ReactElement
+```
+
+## Parameters
+
+<ParamField path="children" type="ReactNode" optional>
+  React children that will have access to the Provider's store.
+</ParamField>
+
+<ParamField path="store" type="Store" optional>
+  A custom store instance created with `createStore()`. If not provided, a new store will be created automatically.
+</ParamField>
+
+## Returns
+
+<ResponseField name="element" type="ReactElement">
+  A React element that provides the store context to its children.
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { Provider } from 'jotai'
+import { App } from './App'
+
+function Root() {
+  return (
+    <Provider>
+      <App />
+    </Provider>
+  )
+}
+```
+
+### With Custom Store
+
+```typescript
+import { Provider, createStore } from 'jotai'
+import { App } from './App'
+
+const myStore = createStore()
+
+function Root() {
+  return (
+    <Provider store={myStore}>
+      <App />
+    </Provider>
+  )
+}
+```
+
+### Multiple Isolated Stores
+
+```typescript
+import { Provider, atom, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>Increment</button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <div>
+      <h2>Store 1</h2>
+      <Provider>
+        <Counter />
+      </Provider>
+
+      <h2>Store 2</h2>
+      <Provider>
+        <Counter />
+      </Provider>
+    </div>
+  )
+}
+// Each Provider has its own independent count state
+```
+
+### Nested Providers
+
+```typescript
+import { Provider, atom, useAtom } from 'jotai'
+
+const themeAtom = atom('light')
+const userAtom = atom({ name: 'Guest' })
+
+function ThemedContent() {
+  const [theme] = useAtom(themeAtom)
+  const [user] = useAtom(userAtom)
+
+  return (
+    <div className={theme}>
+      Welcome, {user.name}!
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <Provider>
+      {/* Global theme */}
+      <Provider>
+        {/* Scoped user state */}
+        <ThemedContent />
+      </Provider>
+    </Provider>
+  )
+}
+```
+
+### Reusing Store Across Components
+
+```typescript
+import { Provider, createStore, atom } from 'jotai'
+
+const countAtom = atom(0)
+const myStore = createStore()
+
+// Initialize store
+myStore.set(countAtom, 10)
+
+function App() {
+  return (
+    <Provider store={myStore}>
+      <Counter />
+    </Provider>
+  )
+}
+```
+
+### Server-Side Rendering (SSR)
+
+```typescript
+import { Provider, createStore, atom } from 'jotai'
+
+const userAtom = atom({ name: 'Unknown' })
+
+function App({ initialUserData }) {
+  // Create a new store for each request
+  const store = createStore()
+
+  // Hydrate initial state
+  store.set(userAtom, initialUserData)
+
+  return (
+    <Provider store={store}>
+      <UserProfile />
+    </Provider>
+  )
+}
+```
+
+### Testing with Isolated State
+
+```typescript
+import { Provider, atom, useAtom } from 'jotai'
+import { render, screen } from '@testing-library/react'
+
+const countAtom = atom(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  return (
+    <div>
+      <span>Count: {count}</span>
+      <button onClick={() => setCount((c) => c + 1)}>Increment</button>
+    </div>
+  )
+}
+
+test('counter increments', () => {
+  // Each test gets a fresh store
+  render(
+    <Provider>
+      <Counter />
+    </Provider>
+  )
+
+  expect(screen.getByText('Count: 0')).toBeInTheDocument()
+})
+```
+
+### Without Provider (Default Store)
+
+```typescript
+import { atom, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+function Counter() {
+  // Uses the default global store
+  const [count, setCount] = useAtom(countAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>Increment</button>
+    </div>
+  )
+}
+
+function App() {
+  return <Counter />
+}
+// No Provider needed, but state is global across the entire app
+```
+
+## Notes
+
+- Provider is **optional**. Without a Provider, atoms use a default global store via `getDefaultStore()`
+- Each Provider creates an isolated store scope - atoms in different Providers don't share state
+- Providers can be nested - the closest Provider wins
+- If you pass a custom `store`, it will be reused across re-renders
+- If you don't pass a `store`, a new store is created once using `useRef` and persists across re-renders
+- Provider is essential for SSR to ensure each request gets its own state
+- Useful for testing to ensure test isolation
+
+## Related APIs
+
+- [createStore](/api/create-store) - Create a custom store instance
+- [getDefaultStore](/api/get-default-store) - Get the default global store
+- [useAtom](/api/use-atom) - Read and write atoms within a Provider
+- [useStore](/api/use-store) - Access the current Provider's store

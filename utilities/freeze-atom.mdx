@@ -1,0 +1,259 @@
+---
+title: freezeAtom
+description: Deep freeze atom values to prevent accidental mutations
+---
+
+`freezeAtom` wraps an atom to deep freeze its values, preventing accidental mutations in development. This helps catch bugs where state is mutated instead of being updated immutably.
+
+## Signature
+
+```ts
+function freezeAtom<AtomType extends Atom<unknown>>(
+  anAtom: AtomType
+): AtomType
+```
+
+<ParamField path="anAtom" type="Atom<unknown>" required>
+  The atom to wrap with deep freezing
+</ParamField>
+
+## Usage
+
+### Basic usage
+
+```tsx
+import { freezeAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const baseAtom = atom({ count: 0, items: [] })
+const frozenAtom = freezeAtom(baseAtom)
+
+function Counter() {
+  const [state, setState] = useAtom(frozenAtom)
+  
+  const handleIncrement = () => {
+    // ❌ This will throw an error in development
+    // state.count++
+    
+    // ✅ This is correct - create a new object
+    setState({ ...state, count: state.count + 1 })
+  }
+  
+  return (
+    <div>
+      <div>Count: {state.count}</div>
+      <button onClick={handleIncrement}>Increment</button>
+    </div>
+  )
+}
+```
+
+### Catching array mutations
+
+```tsx
+import { freezeAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const todoListAtom = freezeAtom(
+  atom([
+    { id: 1, text: 'Buy milk', completed: false },
+    { id: 2, text: 'Walk dog', completed: true }
+  ])
+)
+
+function TodoList() {
+  const [todos, setTodos] = useAtom(todoListAtom)
+  
+  const handleAdd = (text: string) => {
+    // ❌ This will throw an error - can't mutate frozen array
+    // todos.push({ id: Date.now(), text, completed: false })
+    
+    // ✅ Correct - create new array
+    setTodos([...todos, { id: Date.now(), text, completed: false }])
+  }
+  
+  const handleToggle = (id: number) => {
+    // ❌ This will throw an error - can't mutate frozen objects
+    // const todo = todos.find(t => t.id === id)
+    // todo.completed = !todo.completed
+    
+    // ✅ Correct - map to new array with new objects
+    setTodos(todos.map(todo =>
+      todo.id === id
+        ? { ...todo, completed: !todo.completed }
+        : todo
+    ))
+  }
+  
+  return (
+    <ul>
+      {todos.map(todo => (
+        <li key={todo.id}>
+          <input
+            type="checkbox"
+            checked={todo.completed}
+            onChange={() => handleToggle(todo.id)}
+          />
+          {todo.text}
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### Nested object mutations
+
+```tsx
+import { freezeAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const userAtom = freezeAtom(
+  atom({
+    name: 'John',
+    address: {
+      street: '123 Main St',
+      city: 'New York',
+      country: 'USA'
+    },
+    preferences: {
+      theme: 'dark',
+      notifications: true
+    }
+  })
+)
+
+function UserProfile() {
+  const [user, setUser] = useAtom(userAtom)
+  
+  const updateTheme = (theme: string) => {
+    // ❌ This will throw an error - nested objects are also frozen
+    // user.preferences.theme = theme
+    
+    // ✅ Correct - create new nested objects
+    setUser({
+      ...user,
+      preferences: {
+        ...user.preferences,
+        theme
+      }
+    })
+  }
+  
+  return (
+    <div>
+      <div>Theme: {user.preferences.theme}</div>
+      <button onClick={() => updateTheme('light')}>Light theme</button>
+    </div>
+  )
+}
+```
+
+### Using with derived atoms
+
+```tsx
+import { freezeAtom } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const baseDataAtom = freezeAtom(
+  atom({ users: [], posts: [] })
+)
+
+const usersAtom = atom(
+  (get) => get(baseDataAtom).users,
+  (get, set, newUsers) => {
+    set(baseDataAtom, {
+      ...get(baseDataAtom),
+      users: newUsers
+    })
+  }
+)
+
+function UserList() {
+  const [users, setUsers] = useAtom(usersAtom)
+  
+  const addUser = (user) => {
+    // ✅ Correct - create new array
+    setUsers([...users, user])
+  }
+  
+  return (
+    <ul>
+      {users.map(user => (
+        <li key={user.id}>{user.name}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### Development-only freezing
+
+```tsx
+import { freezeAtom } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const createAtom = (initialValue) => {
+  const baseAtom = atom(initialValue)
+  
+  // Only freeze in development
+  return process.env.NODE_ENV === 'development'
+    ? freezeAtom(baseAtom)
+    : baseAtom
+}
+
+const myAtom = createAtom({ count: 0 })
+```
+
+## Features
+
+- **Deep freezing**: Recursively freezes all nested objects and arrays
+- **Development aid**: Catches mutation bugs during development
+- **Immutability enforcement**: Throws errors when trying to mutate frozen values
+- **Works with all atoms**: Can wrap both primitive and derived atoms
+- **Transparent**: Doesn't change the atom's type or API
+
+## Notes
+
+- The freezing is **deep** - all nested objects and arrays are frozen
+- Frozen objects throw `TypeError` when mutation is attempted in strict mode
+- In non-strict mode, mutations silently fail
+- This is primarily a development tool - consider disabling in production for performance
+- Only objects and arrays are frozen; primitives are unchanged
+- The atom itself is modified in-place and returned
+
+## freezeAtomCreator (deprecated)
+
+<Warning>
+  `freezeAtomCreator` is deprecated. Define the wrapper on the user end instead.
+</Warning>
+
+```tsx
+// Before (deprecated)
+import { freezeAtomCreator } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const createFrozenAtom = freezeAtomCreator(atom)
+const myAtom = createFrozenAtom({ count: 0 })
+
+// After (recommended)
+import { freezeAtom } from 'jotai/utils'
+import { atom } from 'jotai'
+
+const createFrozenAtom = (initialValue) => freezeAtom(atom(initialValue))
+const myAtom = createFrozenAtom({ count: 0 })
+```
+
+## When to use
+
+- **During development**: To catch accidental mutations
+- **Complex state**: When managing deeply nested state structures
+- **Team projects**: To enforce immutability patterns across the team
+- **Learning**: To understand where mutations occur in your code
+
+## Performance considerations
+
+- Deep freezing has a runtime cost
+- Consider using only in development builds
+- For large objects, freezing can be expensive
+- The check happens on every read and write

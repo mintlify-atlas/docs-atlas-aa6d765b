@@ -1,122 +1,172 @@
 {
   "$schema": "https://mintlify.com/docs.json",
+  "name": "Jotai",
   "theme": "mint",
-  "name": "Mint Starter Kit",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#7c3aed",
+    "light": "#a78bfa",
+    "dark": "#5b21b6"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/pmndrs/jotai"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/pmndrs/jotai",
+      "discord": "https://discord.gg/poimandres"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "core/atoms",
+              "core/providers",
+              "core/store",
+              "core/use-atom",
+              "core/async"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Utilities",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "utilities/atom-with-storage",
+              "utilities/atom-family",
+              "utilities/atom-with-reset",
+              "utilities/atom-with-reducer",
+              "utilities/atom-with-default",
+              "utilities/atom-with-observable",
+              "utilities/select-atom",
+              "utilities/split-atom",
+              "utilities/loadable",
+              "utilities/unwrap",
+              "utilities/freeze-atom"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "React Hooks",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "hooks/use-atom-value",
+              "hooks/use-set-atom",
+              "hooks/use-reset-atom",
+              "hooks/use-reducer-atom",
+              "hooks/use-atom-callback",
+              "hooks/use-hydrate-atoms"
+            ]
+          },
+          {
+            "group": "Extensions",
+            "pages": [
+              "extensions/query",
+              "extensions/cache",
+              "extensions/immer",
+              "extensions/optics",
+              "extensions/xstate",
+              "extensions/valtio",
+              "extensions/zustand",
+              "extensions/redux",
+              "extensions/tRPC",
+              "extensions/urql",
+              "extensions/effect",
+              "extensions/location",
+              "extensions/molecules"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/typescript",
+              "guides/nextjs",
+              "guides/react-native",
+              "guides/vite",
+              "guides/remix",
+              "guides/testing",
+              "guides/debugging",
+              "guides/performance",
+              "guides/persistence",
+              "guides/async-patterns",
+              "guides/composing-atoms"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/core-internals",
+              "advanced/store-outside-react",
+              "advanced/atoms-in-atom",
+              "advanced/initialize-on-render",
+              "advanced/resettable"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "resources/comparison",
+              "resources/showcase",
+              "resources/migration-guide"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core API",
             "pages": [
-              "api-reference/introduction"
+              "api/atom",
+              "api/use-atom",
+              "api/use-atom-value",
+              "api/use-set-atom",
+              "api/provider",
+              "api/create-store",
+              "api/get-default-store"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Utilities API",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/utils/atom-with-storage",
+              "api/utils/atom-family",
+              "api/utils/atom-with-reset",
+              "api/utils/atom-with-reducer",
+              "api/utils/atom-with-default",
+              "api/utils/atom-with-refresh",
+              "api/utils/atom-with-observable",
+              "api/utils/atom-with-lazy",
+              "api/utils/select-atom",
+              "api/utils/split-atom",
+              "api/utils/freeze-atom",
+              "api/utils/loadable",
+              "api/utils/unwrap"
+            ]
+          },
+          {
+            "group": "React Hooks API",
+            "pages": [
+              "api/hooks/use-reset-atom",
+              "api/hooks/use-reducer-atom",
+              "api/hooks/use-atom-callback",
+              "api/hooks/use-hydrate-atoms"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,174 @@
+---
+title: useSetAtom
+description: Get a setter function for an atom
+---
+
+`useSetAtom` is a React hook that returns a function to update an atom's value. Unlike `useAtom`, it doesn't subscribe to the atom's value, so it won't trigger re-renders when the atom changes.
+
+## When to use it
+
+Use `useSetAtom` when you only need to update an atom without reading its current value. This is more efficient than `useAtom` because it doesn't create a subscription.
+
+## Signature
+
+```ts
+function useSetAtom<Value, Args extends unknown[], Result>(
+  atom: WritableAtom<Value, Args, Result>,
+  options?: Options
+): (...args: Args) => Result
+```
+
+### Parameters
+
+- `atom`: A writable atom to get the setter function for
+- `options`: Optional configuration object
+  - `store`: Custom store to use (defaults to the store from Provider)
+
+### Returns
+
+A stable setter function that accepts the atom's write arguments and returns the write result.
+
+## Basic Usage
+
+```tsx
+import { atom } from 'jotai'
+import { useSetAtom } from 'jotai/react'
+
+const countAtom = atom(0)
+
+function IncrementButton() {
+  const setCount = useSetAtom(countAtom)
+  
+  return (
+    <button onClick={() => setCount((prev) => prev + 1)}>
+      Increment
+    </button>
+  )
+}
+```
+
+This component won't re-render when `countAtom` changes, making it more efficient than using `useAtom`.
+
+## With Write-Only Atoms
+
+`useSetAtom` is perfect for write-only atoms that perform side effects:
+
+```tsx
+import { atom } from 'jotai'
+import { useSetAtom } from 'jotai/react'
+
+const sendMessageAtom = atom(
+  null,
+  async (get, set, message: string) => {
+    await fetch('/api/messages', {
+      method: 'POST',
+      body: JSON.stringify({ message })
+    })
+    // Optionally update other atoms
+    set(messageCountAtom, (prev) => prev + 1)
+  }
+)
+
+function MessageForm() {
+  const sendMessage = useSetAtom(sendMessageAtom)
+  
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    const message = e.target.message.value
+    sendMessage(message)
+  }
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="message" />
+      <button type="submit">Send</button>
+    </form>
+  )
+}
+```
+
+## With Custom Arguments
+
+Atoms can accept custom arguments in their write function:
+
+```tsx
+import { atom } from 'jotai'
+import { useSetAtom } from 'jotai/react'
+
+const todosAtom = atom<Todo[]>([])
+
+const addTodoAtom = atom(
+  null,
+  (get, set, title: string, priority: 'low' | 'high') => {
+    const newTodo = { id: Date.now(), title, priority }
+    set(todosAtom, [...get(todosAtom), newTodo])
+  }
+)
+
+function AddTodoForm() {
+  const addTodo = useSetAtom(addTodoAtom)
+  
+  return (
+    <button onClick={() => addTodo('New task', 'high')}>
+      Add High Priority Todo
+    </button>
+  )
+}
+```
+
+## Comparison with useAtom
+
+```tsx
+// useAtom - subscribes to atom value (causes re-renders)
+const [count, setCount] = useAtom(countAtom)
+
+// useSetAtom - only gets setter (no subscription, no re-renders)
+const setCount = useSetAtom(countAtom)
+
+// useAtomValue - only subscribes to value (no setter)
+const count = useAtomValue(countAtom)
+```
+
+Choose `useSetAtom` when:
+- You only need to update the atom
+- You want to prevent unnecessary re-renders
+- You're creating action/command atoms
+
+## Stable References
+
+The setter function returned by `useSetAtom` is stable and won't change between renders (unless the atom or store changes):
+
+```tsx
+function Component() {
+  const setCount = useSetAtom(countAtom)
+  
+  // setCount reference is stable, safe for useEffect dependencies
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCount((prev) => prev + 1)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [setCount])
+}
+```
+
+## TypeScript
+
+`useSetAtom` preserves type safety for atom write arguments:
+
+```tsx
+const updateUserAtom = atom(
+  null,
+  (get, set, id: number, data: UserData) => {
+    // update logic
+  }
+)
+
+function Component() {
+  const updateUser = useSetAtom(updateUserAtom)
+  
+  // TypeScript enforces correct argument types
+  updateUser(123, { name: 'John' }) // OK
+  updateUser('123', { name: 'John' }) // Error: string is not assignable to number
+}
+```

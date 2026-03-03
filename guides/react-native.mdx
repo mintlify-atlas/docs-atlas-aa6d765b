@@ -1,0 +1,246 @@
+---
+title: React Native
+description: Using Jotai in React Native applications
+---
+
+Jotai works perfectly with React Native out of the box. Our goal is to maintain 100% compatibility with React Native across all platforms.
+
+## Getting Started
+
+<Steps>
+  <Step title="Install Jotai">
+    ```bash
+    npm install jotai
+    # or
+    yarn add jotai
+    ```
+  </Step>
+
+  <Step title="Create atoms">
+    ```ts
+    // store/atoms.ts
+    import { atom } from 'jotai'
+
+    export const countAtom = atom(0)
+    export const userAtom = atom(null)
+    ```
+  </Step>
+
+  <Step title="Use in components">
+    ```tsx
+    import { useAtom } from 'jotai'
+    import { countAtom } from './store/atoms'
+    import { View, Text, Button } from 'react-native'
+
+    export default function Counter() {
+      const [count, setCount] = useAtom(countAtom)
+      
+      return (
+        <View>
+          <Text>Count: {count}</Text>
+          <Button 
+            title="Increment" 
+            onPress={() => setCount(c => c + 1)} 
+          />
+        </View>
+      )
+    }
+    ```
+  </Step>
+</Steps>
+
+## No Special Configuration
+
+Jotai atoms can be used in React Native applications with absolutely no changes from web usage. All features work identically:
+
+- Primitive atoms
+- Derived atoms
+- Async atoms
+- Atom utilities
+- All hooks
+
+## Persistence
+
+For persisting state in React Native, use `atomWithStorage` with `AsyncStorage`:
+
+```tsx
+import { atomWithStorage, createJSONStorage } from 'jotai/utils'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+const storage = createJSONStorage(() => AsyncStorage)
+
+const userAtom = atomWithStorage('user', null, storage)
+const settingsAtom = atomWithStorage('settings', {}, storage)
+```
+
+### Example with AsyncStorage
+
+<Steps>
+  <Step title="Install AsyncStorage">
+    ```bash
+    npm install @react-native-async-storage/async-storage
+    ```
+  </Step>
+
+  <Step title="Create persistent atom">
+    ```ts
+    import { atomWithStorage, createJSONStorage } from 'jotai/utils'
+    import AsyncStorage from '@react-native-async-storage/async-storage'
+
+    const storage = createJSONStorage(() => AsyncStorage)
+
+    export const themeAtom = atomWithStorage(
+      'theme',
+      'light',
+      storage
+    )
+    ```
+  </Step>
+
+  <Step title="Use in component">
+    ```tsx
+    import { useAtom } from 'jotai'
+    import { themeAtom } from './store/atoms'
+
+    export function ThemeToggle() {
+      const [theme, setTheme] = useAtom(themeAtom)
+      
+      return (
+        <Button
+          title={`Switch to ${theme === 'light' ? 'dark' : 'light'}`}
+          onPress={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+        />
+      )
+    }
+    ```
+  </Step>
+</Steps>
+
+## Performance
+
+Jotai has no React Native-specific overhead. Key performance benefits:
+
+### Minimal Bundle Size
+
+Jotai doesn't add extra properties or methods to your data, keeping memory usage minimal.
+
+### Atomic Updates
+
+Jotai's atomic architecture encourages splitting logic and data, giving you precise control over every render:
+
+```tsx
+// Good: Separate atoms for independent data
+const nameAtom = atom('')
+const ageAtom = atom(0)
+
+function NameDisplay() {
+  const [name] = useAtom(nameAtom)
+  return <Text>{name}</Text> // Only re-renders when name changes
+}
+
+function AgeDisplay() {
+  const [age] = useAtom(ageAtom)
+  return <Text>{age}</Text> // Only re-renders when age changes
+}
+```
+
+### Optimize Renders
+
+Keep renders fast by moving heavy computation to async actions:
+
+```tsx
+const processDataAtom = atom(
+  null,
+  async (_get, set, rawData) => {
+    // Heavy computation in async action
+    const processed = await processLargeDataset(rawData)
+    set(dataAtom, processed)
+  }
+)
+```
+
+## Testing
+
+Test React Native components with Jotai using `@testing-library/react-native`:
+
+```tsx
+import { render, fireEvent } from '@testing-library/react-native'
+import { Provider } from 'jotai'
+import { Counter } from './Counter'
+
+test('should increment counter', () => {
+  const { getByText } = render(
+    <Provider>
+      <Counter />
+    </Provider>
+  )
+  
+  const counter = getByText('0')
+  const incrementButton = getByText('Increment')
+  
+  fireEvent.press(incrementButton)
+  
+  expect(counter.props.children.toString()).toEqual('1')
+})
+```
+
+## Platform-Specific Atoms
+
+Create platform-specific atoms using React Native's `Platform` API:
+
+```ts
+import { Platform } from 'react-native'
+import { atom } from 'jotai'
+
+const platformAtom = atom(Platform.OS) // 'ios' | 'android' | 'web'
+
+const platformSpecificAtom = atom((get) => {
+  const platform = get(platformAtom)
+  
+  return platform === 'ios'
+    ? 'iOS specific value'
+    : 'Android specific value'
+})
+```
+
+## Navigation Integration
+
+Jotai works well with React Navigation:
+
+```tsx
+import { useAtom } from 'jotai'
+import { useNavigation } from '@react-navigation/native'
+
+const userAtom = atom(null)
+
+function LoginButton() {
+  const [user, setUser] = useAtom(userAtom)
+  const navigation = useNavigation()
+  
+  const handleLogin = async () => {
+    const user = await login()
+    setUser(user)
+    navigation.navigate('Home')
+  }
+  
+  return <Button title="Login" onPress={handleLogin} />
+}
+```
+
+## Tips
+
+<Tip>
+Jotai works identically in React Native and web. You can share atom definitions across platforms.
+</Tip>
+
+<Tip>
+Use `atomWithStorage` with `AsyncStorage` for persistent state in React Native.
+</Tip>
+
+<Tip>
+Split your state into atomic pieces for optimal render performance. Each component only re-renders when its specific atoms change.
+</Tip>
+
+<Note>
+Always keep renders fast. Move heavy computation and async operations to atom write functions or separate action atoms.
+</Note>

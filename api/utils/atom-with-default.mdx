@@ -1,0 +1,171 @@
+---
+title: atomWithDefault
+description: API reference for atomWithDefault utility
+---
+
+`atomWithDefault` creates a writable atom that derives its default value from other atoms. It can be reset to recompute the default.
+
+## Import
+
+```typescript
+import { atomWithDefault } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+function atomWithDefault<Value>(
+  getDefault: (get: Getter, options: Options) => Value,
+): WritableAtom<Value, [DefaultSetStateAction<Value>], void>
+
+type DefaultSetStateAction<Value> =
+  | Value
+  | typeof RESET
+  | ((prev: Value) => Value | typeof RESET)
+```
+
+## Parameters
+
+<ParamField path="getDefault" type="(get: Getter, options: Options) => Value" required>
+  A function that derives the default value from other atoms using `get`. This function is called when the atom is first read or after being reset
+</ParamField>
+
+## Return Value
+
+Returns a writable atom that:
+- Initially returns the value from `getDefault`
+- Can be updated with new values
+- Can be reset using the `RESET` symbol to recompute the default
+
+## Usage Example
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { atomWithDefault, RESET } from 'jotai/utils'
+
+const baseAtom = atom(0)
+const derivedAtom = atomWithDefault((get) => get(baseAtom) * 2)
+
+function Component() {
+  const [base, setBase] = useAtom(baseAtom)
+  const [derived, setDerived] = useAtom(derivedAtom)
+
+  return (
+    <div>
+      <p>Base: {base}</p>
+      <p>Derived: {derived}</p>
+      <button onClick={() => setBase((b) => b + 1)}>Increment Base</button>
+      <button onClick={() => setDerived(100)}>Set Derived to 100</button>
+      <button onClick={() => setDerived(RESET)}>Reset Derived</button>
+    </div>
+  )
+}
+```
+
+## Advanced Example
+
+```typescript
+import { atom } from 'jotai'
+import { atomWithDefault, atomWithStorage, RESET } from 'jotai/utils'
+
+// Server-provided default
+const serverConfigAtom = atom(async () => {
+  const response = await fetch('/api/config')
+  return response.json()
+})
+
+// User preferences with server default
+const userPreferencesAtom = atomWithDefault(
+  async (get) => await get(serverConfigAtom)
+)
+
+function Settings() {
+  const [preferences, setPreferences] = useAtom(userPreferencesAtom)
+
+  const handleSave = () => {
+    // Save custom preferences
+    setPreferences({ theme: 'dark', language: 'en' })
+  }
+
+  const handleResetToDefault = () => {
+    // Reset to server defaults
+    setPreferences(RESET)
+  }
+
+  return (
+    <div>
+      <div>Theme: {preferences.theme}</div>
+      <button onClick={handleSave}>Save Custom</button>
+      <button onClick={handleResetToDefault}>Reset to Server Default</button>
+    </div>
+  )
+}
+```
+
+## Overriding Storage Defaults
+
+```typescript
+import { atom } from 'jotai'
+import { atomWithDefault, atomWithStorage, RESET } from 'jotai/utils'
+
+// Remote configuration
+const remoteConfigAtom = atom({ color: 'blue', size: 'medium' })
+
+// Local override with remote default
+const localConfigAtom = atomWithDefault(
+  (get) => get(remoteConfigAtom)
+)
+
+function ConfigEditor() {
+  const [remoteConfig] = useAtom(remoteConfigAtom)
+  const [localConfig, setLocalConfig] = useAtom(localConfigAtom)
+
+  return (
+    <div>
+      <p>Remote: {JSON.stringify(remoteConfig)}</p>
+      <p>Local: {JSON.stringify(localConfig)}</p>
+      
+      <button onClick={() => setLocalConfig({ color: 'red', size: 'large' })}>
+        Override
+      </button>
+      <button onClick={() => setLocalConfig(RESET)}>
+        Reset to Remote
+      </button>
+    </div>
+  )
+}
+```
+
+## Fallback Pattern
+
+```typescript
+import { atom } from 'jotai'
+import { atomWithDefault, RESET } from 'jotai/utils'
+
+const userNameAtom = atomWithStorage<string | null>('userName', null)
+const defaultNameAtom = atom('Guest')
+
+const displayNameAtom = atomWithDefault((get) => {
+  return get(userNameAtom) ?? get(defaultNameAtom)
+})
+
+function UserDisplay() {
+  const [displayName, setDisplayName] = useAtom(displayNameAtom)
+
+  return (
+    <div>
+      <p>Hello, {displayName}!</p>
+      <button onClick={() => setDisplayName('Alice')}>Set Name</button>
+      <button onClick={() => setDisplayName(RESET)}>Reset</button>
+    </div>
+  )
+}
+```
+
+## Notes
+
+- The default is recomputed when you set the atom to `RESET`
+- Once overwritten, the atom will not automatically update when dependencies change
+- The `getDefault` function can be async and return a Promise
+- Useful for implementing "reset to default" functionality
+- The atom maintains its overridden value until reset

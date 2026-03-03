@@ -1,0 +1,581 @@
+---
+title: Resettable Atoms
+description: Patterns for creating atoms that can be reset to initial values
+---
+
+Resettable atoms can be reset to their initial values using a special `RESET` symbol. This is useful for forms, filters, and any state that needs a "reset to default" feature.
+
+## When to Use Resettable Atoms
+
+Use resettable atoms when:
+- Building forms with reset buttons
+- Creating filters that can be cleared
+- Managing temporary state that needs cleanup
+- Implementing undo/redo functionality
+- Testing components (resetting between tests)
+
+<Info>
+Resettable atoms are **not** part of Jotai core. They're provided by `jotai/utils`.
+</Info>
+
+## Basic Usage with atomWithReset
+
+The simplest way to create a resettable atom:
+
+```jsx
+import { useAtom } from 'jotai'
+import { atomWithReset, useResetAtom } from 'jotai/utils'
+
+const todoListAtom = atomWithReset([
+  { description: 'Buy milk', checked: false },
+  { description: 'Walk dog', checked: false }
+])
+
+function TodoList() {
+  const [todoList, setTodoList] = useAtom(todoListAtom)
+  const resetTodoList = useResetAtom(todoListAtom)
+  
+  return (
+    <div>
+      <ul>
+        {todoList.map((todo, i) => (
+          <li key={i}>
+            <input
+              type="checkbox"
+              checked={todo.checked}
+              onChange={(e) => {
+                const newList = [...todoList]
+                newList[i] = { ...todo, checked: e.target.checked }
+                setTodoList(newList)
+              }}
+            />
+            {todo.description}
+          </li>
+        ))}
+      </ul>
+      
+      <button onClick={() => setTodoList((prev) => [
+        ...prev,
+        { description: `New todo ${Date.now()}`, checked: false }
+      ])}>
+        Add Todo
+      </button>
+      
+      <button onClick={resetTodoList}>
+        Reset to Default
+      </button>
+    </div>
+  )
+}
+```
+
+## How It Works
+
+### atomWithReset
+
+`atomWithReset` creates a writable atom that accepts a special `RESET` symbol:
+
+```ts
+function atomWithReset<Value>(initialValue: Value)
+```
+
+Under the hood:
+
+```js
+import { atom } from 'jotai'
+import { RESET } from 'jotai/utils'
+
+export function atomWithReset(initialValue) {
+  const anAtom = atom(
+    initialValue,
+    (get, set, update) => {
+      const nextValue = typeof update === 'function'
+        ? update(get(anAtom))
+        : update
+      
+      set(anAtom, nextValue === RESET ? initialValue : nextValue)
+    }
+  )
+  return anAtom
+}
+```
+
+### useResetAtom
+
+Convenience hook for resetting:
+
+```jsx
+const resetTodoList = useResetAtom(todoListAtom)
+// Equivalent to:
+const [, setTodoList] = useAtom(todoListAtom)
+const reset = () => setTodoList(RESET)
+```
+
+## Using RESET Symbol Directly
+
+You can use `RESET` symbol directly:
+
+```jsx
+import { atom, useSetAtom } from 'jotai'
+import { atomWithReset, RESET } from 'jotai/utils'
+
+const countAtom = atomWithReset(0)
+
+function Counter() {
+  const setCount = useSetAtom(countAtom)
+  
+  return (
+    <div>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+      <button onClick={() => setCount(RESET)}>Reset</button>
+    </div>
+  )
+}
+```
+
+## Resettable Derived Atoms
+
+You can create derived atoms that accept `RESET`:
+
+```jsx
+import { atom, useAtom, useSetAtom } from 'jotai'
+import { atomWithReset, useResetAtom, RESET } from 'jotai/utils'
+
+const dollarsAtom = atomWithReset(0)
+
+// Derived atom that converts dollars to cents
+const centsAtom = atom(
+  (get) => get(dollarsAtom) * 100,
+  (get, set, newValue: number | typeof RESET) => {
+    // Forward RESET to the base atom
+    set(dollarsAtom, newValue === RESET ? newValue : newValue / 100)
+  }
+)
+
+function MoneyDisplay() {
+  const [dollars] = useAtom(dollarsAtom)
+  const setCents = useSetAtom(centsAtom)
+  const resetCents = useResetAtom(centsAtom)
+  
+  return (
+    <div>
+      <h3>Current balance: ${dollars}</h3>
+      <button onClick={() => setCents(100)}>Set $1</button>
+      <button onClick={() => setCents(200)}>Set $2</button>
+      <button onClick={resetCents}>Reset</button>
+    </div>
+  )
+}
+```
+
+<Warning>
+When forwarding `RESET`, pass it directly: `set(atom, RESET)`. Don't convert it to a value.
+</Warning>
+
+## Form Reset Pattern
+
+Resettable atoms are perfect for forms:
+
+```jsx
+import { useAtom } from 'jotai'
+import { atomWithReset, useResetAtom } from 'jotai/utils'
+
+const formAtom = atomWithReset({
+  username: '',
+  email: '',
+  password: '',
+  agreeToTerms: false
+})
+
+function SignupForm() {
+  const [form, setForm] = useAtom(formAtom)
+  const resetForm = useResetAtom(formAtom)
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    await submitForm(form)
+    resetForm() // Clear form after submit
+  }
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        value={form.username}
+        onChange={(e) => setForm({ ...form, username: e.target.value })}
+        placeholder="Username"
+      />
+      <input
+        type="email"
+        value={form.email}
+        onChange={(e) => setForm({ ...form, email: e.target.value })}
+        placeholder="Email"
+      />
+      <input
+        type="password"
+        value={form.password}
+        onChange={(e) => setForm({ ...form, password: e.target.value })}
+        placeholder="Password"
+      />
+      <label>
+        <input
+          type="checkbox"
+          checked={form.agreeToTerms}
+          onChange={(e) => setForm({ ...form, agreeToTerms: e.target.checked })}
+        />
+        I agree to terms
+      </label>
+      
+      <button type="submit">Sign Up</button>
+      <button type="button" onClick={resetForm}>Clear Form</button>
+    </form>
+  )
+}
+```
+
+## Filter Reset Pattern
+
+```jsx
+import { atom, useAtom } from 'jotai'
+import { atomWithReset, useResetAtom } from 'jotai/utils'
+
+const filtersAtom = atomWithReset({
+  search: '',
+  category: 'all',
+  minPrice: 0,
+  maxPrice: 1000,
+  inStock: false
+})
+
+const productsAtom = atom([/* ... */])
+
+const filteredProductsAtom = atom((get) => {
+  const filters = get(filtersAtom)
+  const products = get(productsAtom)
+  
+  return products.filter((product) => {
+    if (filters.search && !product.name.includes(filters.search)) return false
+    if (filters.category !== 'all' && product.category !== filters.category) return false
+    if (product.price < filters.minPrice || product.price > filters.maxPrice) return false
+    if (filters.inStock && !product.inStock) return false
+    return true
+  })
+})
+
+function ProductFilters() {
+  const [filters, setFilters] = useAtom(filtersAtom)
+  const resetFilters = useResetAtom(filtersAtom)
+  
+  return (
+    <div>
+      <input
+        value={filters.search}
+        onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+        placeholder="Search..."
+      />
+      
+      <select
+        value={filters.category}
+        onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+      >
+        <option value="all">All Categories</option>
+        <option value="electronics">Electronics</option>
+        <option value="clothing">Clothing</option>
+      </select>
+      
+      <label>
+        <input
+          type="checkbox"
+          checked={filters.inStock}
+          onChange={(e) => setFilters({ ...filters, inStock: e.target.checked })}
+        />
+        In Stock Only
+      </label>
+      
+      <button onClick={resetFilters}>Clear All Filters</button>
+    </div>
+  )
+}
+```
+
+## atomWithDefault for Dynamic Defaults
+
+`atomWithDefault` creates a resettable atom with a **computed** default value:
+
+```jsx
+import { atom } from 'jotai'
+import { atomWithDefault } from 'jotai/utils'
+
+const baseCountAtom = atom(1)
+
+// Default value is always 2x baseCount
+const doubledCountAtom = atomWithDefault((get) => get(baseCountAtom) * 2)
+
+function Counter() {
+  const [baseCount, setBaseCount] = useAtom(baseCountAtom)
+  const [doubled, setDoubled] = useAtom(doubledCountAtom)
+  const resetDoubled = useResetAtom(doubledCountAtom)
+  
+  return (
+    <div>
+      <p>Base: {baseCount}, Doubled: {doubled}</p>
+      
+      <button onClick={() => setBaseCount((c) => c + 1)}>
+        Increment Base
+      </button>
+      
+      <button onClick={() => setDoubled((c) => c + 1)}>
+        Increment Doubled (breaks sync)
+      </button>
+      
+      <button onClick={resetDoubled}>
+        Reset Doubled (re-syncs with base * 2)
+      </button>
+    </div>
+  )
+}
+```
+
+### When to Use atomWithDefault
+
+Use `atomWithDefault` when:
+- Default value depends on other atoms
+- You want to "override" a derived value temporarily
+- You need to restore derived behavior after manual updates
+
+```jsx
+import { atomWithDefault, RESET } from 'jotai/utils'
+
+// User's preferred theme, or system theme
+const systemThemeAtom = atom('light')
+const userThemeAtom = atomWithDefault((get) => get(systemThemeAtom))
+
+// User can override
+setUserTheme('dark')
+
+// Reset to system theme
+setUserTheme(RESET)
+```
+
+## Performance Implications
+
+### Reset is Just a Write
+
+Resetting triggers normal atom updates:
+
+```jsx
+// These are equivalent in terms of re-renders
+resetForm() // Writes initial value
+setForm(initialValue) // Writes same value
+```
+
+### Resetting Multiple Atoms
+
+Reset atoms in a single write to batch updates:
+
+```jsx
+const emailAtom = atomWithReset('')
+const passwordAtom = atomWithReset('')
+
+// Don't do this - triggers two updates
+resetEmail()
+resetPassword()
+
+// Better - single update
+const resetFormAtom = atom(null, (get, set) => {
+  set(emailAtom, RESET)
+  set(passwordAtom, RESET)
+})
+
+const resetForm = useSetAtom(resetFormAtom)
+resetForm() // Single update
+```
+
+## Edge Cases
+
+### RESET with Functions
+
+If your initial value is a function, wrap it:
+
+```jsx
+const callbackAtom = atomWithReset(() => console.log('hello'))
+
+// This tries to call the function!
+setCallback(() => console.log('world')) // ❌ Wrong
+
+// Wrap in function
+setCallback(() => () => console.log('world')) // ✅ Correct
+```
+
+### RESET in Read-Only Atoms
+
+You can't reset read-only atoms:
+
+```jsx
+const derivedAtom = atom((get) => get(baseAtom) * 2)
+// derivedAtom is read-only, can't be reset
+
+// To make it resettable, add a write function
+const resettableDerivedAtom = atom(
+  (get) => get(baseAtom) * 2,
+  (get, set, update: number | typeof RESET) => {
+    if (update === RESET) {
+      set(baseAtom, RESET)
+    } else {
+      set(baseAtom, update / 2)
+    }
+  }
+)
+```
+
+### TypeScript Types
+
+```tsx
+import type { WritableAtom } from 'jotai'
+import { atomWithReset, RESET } from 'jotai/utils'
+
+// Type includes RESET
+type CountAtom = WritableAtom<number, [(number | typeof RESET)], void>
+
+const countAtom: CountAtom = atomWithReset(0)
+
+// In write function
+const derivedAtom = atom(
+  (get) => get(countAtom),
+  (get, set, update: number | typeof RESET) => {
+    set(countAtom, update)
+  }
+)
+```
+
+## Testing
+
+Reset atoms between tests:
+
+```jsx
+import { createStore } from 'jotai'
+import { atomWithReset, RESET } from 'jotai/utils'
+
+const countAtom = atomWithReset(0)
+
+describe('counter', () => {
+  let store
+  
+  beforeEach(() => {
+    store = createStore()
+    // Or reset in existing store
+    store.set(countAtom, RESET)
+  })
+  
+  test('starts at 0', () => {
+    expect(store.get(countAtom)).toBe(0)
+  })
+  
+  test('increments', () => {
+    store.set(countAtom, 1)
+    expect(store.get(countAtom)).toBe(1)
+  })
+})
+```
+
+## Best Practices
+
+1. **Use for user-facing resets**: Forms, filters, settings
+2. **Document initial values**: Make defaults obvious
+3. **Consider atomWithDefault**: For dynamic defaults
+4. **Batch resets**: Reset multiple atoms in one write
+5. **Test reset behavior**: Ensure resetting works as expected
+
+## When Not to Use
+
+- Simple state that doesn't need resetting
+- Derived atoms (unless you need override behavior)
+- Atoms that never change (use plain `atom` instead)
+- When "reset" means something domain-specific (use a named action)
+
+## Example: Settings Panel
+
+```jsx
+import { useAtom } from 'jotai'
+import { atomWithReset, useResetAtom, RESET } from 'jotai/utils'
+
+const settingsAtom = atomWithReset({
+  theme: 'light',
+  language: 'en',
+  notifications: true,
+  fontSize: 16,
+  autoSave: true
+})
+
+function SettingsPanel() {
+  const [settings, setSettings] = useAtom(settingsAtom)
+  const resetSettings = useResetAtom(settingsAtom)
+  const [hasChanges, setHasChanges] = useState(false)
+  
+  const updateSetting = (key, value) => {
+    setSettings({ ...settings, [key]: value })
+    setHasChanges(true)
+  }
+  
+  const handleSave = () => {
+    // Save to backend
+    saveSettings(settings)
+    setHasChanges(false)
+  }
+  
+  const handleReset = () => {
+    resetSettings()
+    setHasChanges(false)
+  }
+  
+  return (
+    <div>
+      <h2>Settings</h2>
+      
+      <label>
+        Theme:
+        <select
+          value={settings.theme}
+          onChange={(e) => updateSetting('theme', e.target.value)}
+        >
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+      
+      <label>
+        Font Size:
+        <input
+          type="number"
+          value={settings.fontSize}
+          onChange={(e) => updateSetting('fontSize', Number(e.target.value))}
+        />
+      </label>
+      
+      <label>
+        <input
+          type="checkbox"
+          checked={settings.notifications}
+          onChange={(e) => updateSetting('notifications', e.target.checked)}
+        />
+        Enable Notifications
+      </label>
+      
+      <div>
+        <button onClick={handleSave} disabled={!hasChanges}>
+          Save Changes
+        </button>
+        <button onClick={handleReset} disabled={!hasChanges}>
+          Reset to Defaults
+        </button>
+      </div>
+    </div>
+  )
+}
+```
+
+## Learn More
+
+- [atomWithReset](/api-reference/utils#atomwithreset) - API reference
+- [useResetAtom](/api-reference/utils#useresetatom) - Hook documentation
+- [atomWithDefault](/api-reference/utils#atomwithdefault) - Dynamic defaults
+- [Form Handling](/essentials/forms) - Form patterns with Jotai

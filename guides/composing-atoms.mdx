@@ -1,0 +1,355 @@
+---
+title: Atom Composition Patterns
+description: Patterns for composing atoms to build complex functionality
+---
+
+Jotai's `atom` function is primitive but incredibly flexible. This guide covers patterns for composing atoms to create powerful, reusable functionality.
+
+## Basic Derived Atoms
+
+The simplest form of composition:
+
+```ts
+import { atom } from 'jotai'
+
+export const textAtom = atom('hello')
+export const textLenAtom = atom((get) => get(textAtom).length)
+```
+
+The `textLenAtom` is a read-only derived atom that automatically updates when `textAtom` changes.
+
+### Writable Derived Atoms
+
+Derived atoms can also have write functions:
+
+```ts
+const textAtom = atom('hello')
+
+export const textUpperCaseAtom = atom(
+  (get) => get(textAtom).toUpperCase(),
+  (_get, set, newText: string) => set(textAtom, newText)
+)
+```
+
+Now `textUpperCaseAtom` can both read (as uppercase) and write (to the original atom). You can hide `textAtom` in a smaller scope and only export the derived version.
+
+## Overriding Default Values
+
+Combine atoms to override read-only values:
+
+```ts
+const rawNumberAtom = atom(10.1)
+const roundNumberAtom = atom((get) => Math.round(get(rawNumberAtom)))
+const overwrittenAtom = atom<number | null>(null)
+
+export const numberAtom = atom(
+  (get) => get(overwrittenAtom) ?? get(roundNumberAtom),
+  (get, set, newValue: number | null | ((prev: number) => number)) => {
+    const nextValue =
+      typeof newValue === 'function'
+        ? newValue(get(numberAtom))
+        : newValue
+    set(overwrittenAtom, nextValue)
+  }
+)
+```
+
+The `numberAtom` acts like a primitive atom. Set a number to override, set `null` to reset to the rounded value.
+
+This pattern is available as `atomWithDefault` in `jotai/utils`. See [atomWithDefault](../utilities/resettable.mdx).
+
+## Syncing with External Values
+
+Create atoms that sync with external values like `localStorage`:
+
+```ts
+const baseAtom = atom(localStorage.getItem('mykey') ?? '')
+
+export const persistedAtom = atom(
+  (get) => get(baseAtom),
+  (get, set, newValue: string | ((prev: string) => string)) => {
+    const nextValue =
+      typeof newValue === 'function'
+        ? newValue(get(baseAtom))
+        : newValue
+    set(baseAtom, nextValue)
+    localStorage.setItem('mykey', nextValue)
+  }
+)
+```
+
+The `persistedAtom` persists to `localStorage` on every write.
+
+This pattern is available as `atomWithStorage` in `jotai/utils`. See [atomWithStorage](../utilities/storage.mdx).
+
+### Caveat: External Singletons
+
+External values like `localStorage` are singletons. If you use this atom in multiple Providers, they won't stay in sync. To solve this, use subscription mechanisms:
+
+- `atomWithStorage` supports subscriptions
+- `atomWithProxy` from `jotai-valtio` has built-in subscriptions
+- `atomWithObservable` from `jotai/utils` works with RxJS
+
+## Extending Atoms
+
+Combine functionality from multiple `atomWith*` utilities:
+
+```ts
+import { atomWithStorage } from 'jotai/utils'
+import { atom } from 'jotai'
+
+type Action = { type: 'INCREMENT' } | { type: 'DECREMENT' }
+
+const reducer = (state: number, action: Action) => {
+  switch (action.type) {
+    case 'INCREMENT':
+      return state + 1
+    case 'DECREMENT':
+      return state - 1
+    default:
+      return state
+  }
+}
+
+const baseAtom = atomWithStorage('count', 0)
+
+export const countAtom = atom(
+  (get) => get(baseAtom),
+  (get, set, action: Action) => {
+    set(baseAtom, reducer(get(baseAtom), action))
+  }
+)
+```
+
+Now you have a reducer atom with persistence!
+
+## Action Atoms
+
+Write-only atoms for actions:
+
+```ts
+const baseAtom = atom(0)
+
+export const countAtom = atom((get) => get(baseAtom)) // read-only
+
+export const incAtom = atom(null, (_get, set) => {
+  set(baseAtom, (prev) => prev + 1)
+})
+
+export const decAtom = atom(null, (_get, set) => {
+  set(baseAtom, (prev) => prev - 1)
+})
+```
+
+This is more atomic and enables code splitting. Action atoms are only loaded when used.
+
+### Composing Action Atoms
+
+Action atoms can call other action atoms:
+
+```ts
+const baseAtom = atom(0)
+
+const incAtom = atom(null, (_get, set) => {
+  set(baseAtom, (prev) => prev + 1)
+})
+
+const decAtom = atom(null, (_get, set) => {
+  set(baseAtom, (prev) => prev - 1)
+})
+
+export const dispatchAtom = atom(
+  null,
+  (_get, set, action: 'INC' | 'DEC') => {
+    if (action === 'INC') {
+      set(incAtom)
+    } else if (action === 'DEC') {
+      set(decAtom)
+    } else {
+      throw new Error('unknown action')
+    }
+  }
+)
+```
+
+Why? Better code splitting and dead code elimination.
+
+## Computed Atoms
+
+Create atoms that compute from multiple sources:
+
+```ts
+const firstNameAtom = atom('John')
+const lastNameAtom = atom('Doe')
+
+export const fullNameAtom = atom(
+  (get) => `${get(firstNameAtom)} ${get(lastNameAtom)}`
+)
+```
+
+### Writable Computed Atoms
+
+```ts
+const firstNameAtom = atom('John')
+const lastNameAtom = atom('Doe')
+
+export const fullNameAtom = atom(
+  (get) => `${get(firstNameAtom)} ${get(lastNameAtom)}`,
+  (_get, set, newFullName: string) => {
+    const [first, last] = newFullName.split(' ')
+    set(firstNameAtom, first)
+    set(lastNameAtom, last)
+  }
+)
+```
+
+## Conditional Logic
+
+Atoms can contain conditional logic:
+
+```ts
+const isDarkModeAtom = atom(false)
+const themeColorAtom = atom((get) => {
+  const isDark = get(isDarkModeAtom)
+  return isDark ? '#000000' : '#ffffff'
+})
+```
+
+## Async Composition
+
+Compose async atoms:
+
+```ts
+const userIdAtom = atom(1)
+
+const userAtom = atom(async (get) => {
+  const userId = get(userIdAtom)
+  const response = await fetch(`/api/user/${userId}`)
+  return response.json()
+})
+
+const userPostsAtom = atom(async (get) => {
+  const user = await get(userAtom)
+  const response = await fetch(`/api/posts?userId=${user.id}`)
+  return response.json()
+})
+```
+
+## Atom Factories
+
+Create reusable atom factories:
+
+```ts
+function atomWithToggle(initialValue = false) {
+  const baseAtom = atom(initialValue)
+  
+  return atom(
+    (get) => get(baseAtom),
+    (get, set) => set(baseAtom, !get(baseAtom))
+  )
+}
+
+const modalOpenAtom = atomWithToggle(false)
+const sidebarOpenAtom = atomWithToggle(true)
+```
+
+### Generic Factories
+
+```ts
+function atomWithReset<T>(initialValue: T) {
+  const baseAtom = atom(initialValue)
+  
+  return atom(
+    (get) => get(baseAtom),
+    (get, set, update: T | typeof RESET) => {
+      set(baseAtom, update === RESET ? initialValue : update)
+    }
+  )
+}
+
+const RESET = Symbol('reset')
+const countAtom = atomWithReset(0)
+
+// Usage
+setCount(5)
+setCount(RESET) // Back to 0
+```
+
+## Circular Dependencies
+
+Handle circular dependencies carefully:
+
+```ts
+// Bad: Infinite loop
+const atomA = atom((get) => get(atomB) + 1)
+const atomB = atom((get) => get(atomA) + 1)
+
+// Good: Break the cycle
+const baseAtom = atom(0)
+const atomA = atom((get) => get(baseAtom) * 2)
+const atomB = atom((get) => get(baseAtom) + 1)
+```
+
+## Function Values
+
+Atoms can hold functions, but wrap them in objects:
+
+```ts
+// Bad: Jotai thinks this is a derived atom
+const funcAtom = atom((n: number) => n * 2)
+
+// Good: Wrap in an object
+const funcAtom = atom({ fn: (n: number) => n * 2 })
+
+// Usage
+function Component() {
+  const [{ fn }] = useAtom(funcAtom)
+  const result = fn(5) // 10
+}
+```
+
+## Dependency Injection
+
+Use atoms for dependency injection:
+
+```ts
+interface Logger {
+  log: (message: string) => void
+}
+
+const loggerAtom = atom<Logger>(console)
+
+const fetchDataAtom = atom(null, async (get, set) => {
+  const logger = get(loggerAtom)
+  logger.log('Fetching data...')
+  
+  const data = await fetchData()
+  logger.log('Data fetched')
+  
+  set(dataAtom, data)
+})
+
+// In tests, inject mock logger
+function TestWrapper({ children }) {
+  useHydrateAtoms([[loggerAtom, mockLogger]])
+  return children
+}
+```
+
+## Tips
+
+<Tip>
+Atoms are like building blocks. Compose small atoms to create complex functionality.
+</Tip>
+
+<Tip>
+Hide implementation atoms (like `baseAtom`) in local scope. Only export the public API atoms.
+</Tip>
+
+<Tip>
+Use action atoms for better code splitting. They're only loaded when actually used.
+</Tip>
+
+<Note>
+When storing functions in atoms, wrap them in objects so Jotai doesn't confuse them with derived atom read functions.
+</Note>

@@ -1,0 +1,376 @@
+---
+title: Performance Optimization
+description: How to optimize performance and limit re-renders
+---
+
+Jotai and React provide powerful tools to manage re-renders and optimize performance. This guide covers best practices for keeping your application fast.
+
+## Understanding Renders vs Commits
+
+Before optimizing, understand the difference:
+
+- **Render**: React calls your component function
+- **Commit**: React updates the actual DOM
+
+Renders are cheap when they don't result in commits. Focus on reducing unnecessary commits.
+
+Learn more: [React Profiler - Browsing Commits](https://legacy.reactjs.org/blog/2018/09/10/introducing-the-react-profiler.html#browsing-commits)
+
+## Keep Renders Cheap
+
+### Idempotent Components
+
+React 18 may call your component multiple times during render. Keep renders cheap and idempotent:
+
+```tsx
+// Good: Cheap render
+function UserName() {
+  const [name] = useAtom(nameAtom)
+  return <div>{name}</div>
+}
+
+// Bad: Expensive render
+function UserName() {
+  const [name] = useAtom(nameAtom)
+  const processed = expensiveOperation(name) // Don't do this!
+  return <div>{processed}</div>
+}
+```
+
+### Move Heavy Computation
+
+Move heavy computation outside the render phase:
+
+```tsx
+// Bad: Heavy computation in selector
+const selector = (s) => s.filter(heavyComputation)
+
+function Profile() {
+  const [computed] = useAtom(selectAtom(friendsAtom, selector))
+}
+
+// Good: Heavy computation in async action
+const friendsAtom = atom([])
+const fetchFriendsAtom = atom(null, async (get, set) => {
+  const res = await fetch('/api/friends')
+  const data = await res.json()
+  
+  // Compute once during fetch
+  const computed = data.filter(heavyComputation)
+  set(friendsAtom, computed)
+})
+
+function Profile() {
+  const [friends] = useAtom(friendsAtom) // No computation during render
+}
+```
+
+## Atomic Components
+
+Split components so only affected parts re-render:
+
+```tsx
+// Bad: Single component for multiple atoms
+function Profile() {
+  const [name] = useAtom(nameAtom)
+  const [age] = useAtom(ageAtom)
+  
+  return (
+    <>
+      <div>{name}</div>
+      <div>{age}</div>
+    </>
+  )
+}
+// Both parts re-render when either atom changes
+
+// Good: Separate components
+function NameDisplay() {
+  const [name] = useAtom(nameAtom)
+  return <div>{name}</div>
+}
+
+function AgeDisplay() {
+  const [age] = useAtom(ageAtom)
+  return <div>{age}</div>
+}
+
+function Profile() {
+  return (
+    <>
+      <NameDisplay /> {/* Only re-renders when name changes */}
+      <AgeDisplay /> {/* Only re-renders when age changes */}
+    </>
+  )
+}
+```
+
+## Selective Subscriptions
+
+Subscribe to specific parts of large objects:
+
+### selectAtom
+
+Subscribe to a specific property:
+
+```tsx
+import { selectAtom } from 'jotai/utils'
+
+const userAtom = atom({ name: 'John', age: 30, email: 'john@example.com' })
+
+// Only re-renders when name changes
+const nameAtom = selectAtom(userAtom, (user) => user.name)
+
+function UserName() {
+  const [name] = useAtom(nameAtom)
+  return <div>{name}</div>
+}
+```
+
+### focusAtom
+
+Create a writable atom for a specific property:
+
+```tsx
+import { focusAtom } from 'jotai-optics'
+
+const userAtom = atom({ name: 'John', age: 30 })
+const nameAtom = focusAtom(userAtom, (optic) => optic.prop('name'))
+
+function NameEditor() {
+  const [name, setName] = useAtom(nameAtom)
+  
+  return (
+    <input
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+    />
+  )
+}
+```
+
+### splitAtom
+
+Create atoms for array items:
+
+```tsx
+import { splitAtom } from 'jotai/utils'
+
+const todosAtom = atom([
+  { id: 1, text: 'Buy milk', completed: false },
+  { id: 2, text: 'Walk dog', completed: true },
+])
+
+const todoAtomsAtom = splitAtom(todosAtom)
+
+function TodoList() {
+  const [todoAtoms] = useAtom(todoAtomsAtom)
+  
+  return (
+    <>
+      {todoAtoms.map((todoAtom) => (
+        <TodoItem key={`${todoAtom}`} todoAtom={todoAtom} />
+      ))}
+    </>
+  )
+}
+
+function TodoItem({ todoAtom }) {
+  const [todo] = useAtom(todoAtom)
+  // Only re-renders when this specific todo changes
+  return <div>{todo.text}</div>
+}
+```
+
+## Update Frequency
+
+Consider how often atoms update:
+
+### Frequent Updates
+
+For frequently updating atoms, avoid fine-grained subscriptions:
+
+```tsx
+// Atom updates every second
+const realTimeDataAtom = atom({ temp: 0, pressure: 0, humidity: 0 })
+
+// Bad: Unnecessary overhead
+const tempAtom = selectAtom(realTimeDataAtom, (d) => d.temp)
+
+// Good: All properties update together anyway
+function Display() {
+  const [data] = useAtom(realTimeDataAtom)
+  return (
+    <div>
+      <div>Temp: {data.temp}</div>
+      <div>Pressure: {data.pressure}</div>
+      <div>Humidity: {data.humidity}</div>
+    </div>
+  )
+}
+```
+
+### Rare Updates
+
+For rarely updating atoms with independent properties, use selective subscriptions:
+
+```tsx
+// Properties update independently and rarely
+const userSettingsAtom = atom({
+  theme: 'light',
+  language: 'en',
+  notifications: true,
+})
+
+// Good: Subscribe to specific properties
+const themeAtom = selectAtom(userSettingsAtom, (s) => s.theme)
+const languageAtom = selectAtom(userSettingsAtom, (s) => s.language)
+
+function ThemeToggle() {
+  const [theme] = useAtom(themeAtom)
+  // Only re-renders when theme changes, not language or notifications
+}
+```
+
+## Memoization
+
+Use React memoization hooks appropriately:
+
+```tsx
+import { useMemo, useCallback } from 'react'
+import { useAtom } from 'jotai'
+
+function TodoList() {
+  const [todos] = useAtom(todosAtom)
+  
+  // Memoize expensive computation
+  const completedCount = useMemo(
+    () => todos.filter(t => t.completed).length,
+    [todos]
+  )
+  
+  // Memoize callbacks
+  const handleAdd = useCallback((text) => {
+    // Add todo logic
+  }, [])
+  
+  return (
+    <div>
+      <p>Completed: {completedCount}</p>
+      <AddTodo onAdd={handleAdd} />
+    </div>
+  )
+}
+```
+
+## Derived Atoms for Computation
+
+Move computation to derived atoms:
+
+```tsx
+// Bad: Compute in component
+function Stats() {
+  const [todos] = useAtom(todosAtom)
+  const completed = todos.filter(t => t.completed).length
+  const total = todos.length
+  
+  return <div>{completed} / {total}</div>
+}
+
+// Good: Compute in derived atom
+const statsAtom = atom((get) => {
+  const todos = get(todosAtom)
+  return {
+    completed: todos.filter(t => t.completed).length,
+    total: todos.length,
+  }
+})
+
+function Stats() {
+  const [stats] = useAtom(statsAtom)
+  return <div>{stats.completed} / {stats.total}</div>
+}
+```
+
+## Lazy Initialization
+
+Lazy load expensive atoms:
+
+```tsx
+// Lazy load heavy feature
+const heavyFeatureAtom = atom(async () => {
+  const module = await import('./heavy-feature')
+  return module.initialize()
+})
+
+function HeavyFeature() {
+  const [feature] = useAtom(heavyFeatureAtom)
+  // Only loads when component mounts
+}
+```
+
+## Write-Only Atoms for Actions
+
+Use write-only atoms to avoid unnecessary dependencies:
+
+```tsx
+const countAtom = atom(0)
+
+// Write-only action atom
+const incrementAtom = atom(
+  null,
+  (get, set) => set(countAtom, get(countAtom) + 1)
+)
+
+function IncrementButton() {
+  const [, increment] = useAtom(incrementAtom)
+  
+  // Doesn't re-render when count changes
+  return <button onClick={increment}>Increment</button>
+}
+```
+
+## Profiling
+
+Use React DevTools Profiler to identify performance issues:
+
+<Steps>
+  <Step title="Open React DevTools">
+    Install React DevTools browser extension
+  </Step>
+
+  <Step title="Start profiling">
+    Click "Profiler" tab, then "Record"
+  </Step>
+
+  <Step title="Interact with app">
+    Perform actions you want to profile
+  </Step>
+
+  <Step title="Stop and analyze">
+    Click "Stop" and review the flame graph
+  </Step>
+</Steps>
+
+Look for:
+- Components that render frequently
+- Long render times
+- Unnecessary renders
+
+## Tips
+
+<Tip>
+Split atoms and components to minimize re-render scope. Only the parts that use changed atoms should re-render.
+</Tip>
+
+<Tip>
+Move heavy computation to async actions or derived atoms, not component render functions.
+</Tip>
+
+<Tip>
+Use `selectAtom` and `focusAtom` for large objects where properties update independently.
+</Tip>
+
+<Note>
+Renders are cheap; commits are expensive. Focus on reducing unnecessary DOM updates, not renders.
+</Note>

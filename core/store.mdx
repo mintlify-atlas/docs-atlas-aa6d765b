@@ -1,0 +1,387 @@
+---
+title: Store
+description: Learn about Jotai stores, createStore, and getDefaultStore APIs
+---
+
+A store holds the state of atoms. While you typically interact with atoms through React hooks, the store API provides direct access to atom state, which is useful for integration with non-React code or for advanced use cases.
+
+## createStore
+
+Create a new store instance:
+
+```typescript
+import { createStore } from 'jotai'
+
+const store = createStore()
+```
+
+### Type Signature
+
+```typescript
+export type Store = {
+  get: <Value>(atom: Atom<Value>) => Value
+  set: <Value, Args extends unknown[], Result>(
+    atom: WritableAtom<Value, Args, Result>,
+    ...args: Args
+  ) => Result
+  sub: (atom: Atom<unknown>, listener: () => void) => () => void
+}
+
+export function createStore(): Store
+```
+
+## Store Methods
+
+### get
+
+Read an atom's current value:
+
+```typescript
+import { atom, createStore } from 'jotai'
+
+const countAtom = atom(0)
+const store = createStore()
+
+const count = store.get(countAtom)
+console.log(count) // 0
+```
+
+For async atoms, `get` returns a Promise:
+
+```typescript
+const asyncAtom = atom(async () => {
+  const response = await fetch('/api/data')
+  return response.json()
+})
+
+const data = await store.get(asyncAtom)
+```
+
+### set
+
+Update a writable atom's value:
+
+```typescript
+import { atom, createStore } from 'jotai'
+
+const countAtom = atom(0)
+const store = createStore()
+
+store.set(countAtom, 5)
+console.log(store.get(countAtom)) // 5
+
+// Using updater function
+store.set(countAtom, (prev) => prev + 1)
+console.log(store.get(countAtom)) // 6
+```
+
+For write-only atoms:
+
+```typescript
+const incrementAtom = atom(null, (get, set) => {
+  set(countAtom, get(countAtom) + 1)
+})
+
+store.set(incrementAtom)
+```
+
+For atoms with custom arguments:
+
+```typescript
+const addAtom = atom(null, (get, set, value: number) => {
+  set(countAtom, get(countAtom) + value)
+})
+
+store.set(addAtom, 10)
+```
+
+### sub
+
+Subscribe to atom changes:
+
+```typescript
+import { atom, createStore } from 'jotai'
+
+const countAtom = atom(0)
+const store = createStore()
+
+const unsubscribe = store.sub(countAtom, () => {
+  console.log('countAtom value changed to', store.get(countAtom))
+})
+
+// Update the atom
+store.set(countAtom, 1) // Logs: "countAtom value changed to 1"
+store.set(countAtom, 2) // Logs: "countAtom value changed to 2"
+
+// Cleanup
+unsubscribe()
+```
+
+<Note>
+  The subscription callback is called whenever the atom's value changes. The callback doesn't receive the new value as an argument - use `store.get(atom)` inside the callback to read the current value.
+</Note>
+
+## getDefaultStore
+
+Get the default global store:
+
+```typescript
+import { getDefaultStore } from 'jotai'
+
+const defaultStore = getDefaultStore()
+```
+
+<Warning>
+  The default store is created lazily on first access. If you're using `Provider` in your application, you typically don't need to use `getDefaultStore`.
+</Warning>
+
+### Default Store Warnings
+
+In development mode, Jotai detects multiple Jotai instances and warns you:
+
+```typescript
+// Internal implementation
+if (import.meta.env?.MODE !== 'production') {
+  globalThis.__JOTAI_DEFAULT_STORE__ ||= defaultStore
+  if (globalThis.__JOTAI_DEFAULT_STORE__ !== defaultStore) {
+    console.warn(
+      'Detected multiple Jotai instances. It may cause unexpected behavior with the default store.'
+    )
+  }
+}
+```
+
+## Use Cases
+
+### Integration with Non-React Code
+
+Use stores to integrate Jotai with non-React code:
+
+```typescript
+import { atom, createStore } from 'jotai'
+
+const countAtom = atom(0)
+const store = createStore()
+
+// Update from a WebSocket
+const ws = new WebSocket('ws://localhost:3000')
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data)
+  store.set(countAtom, data.count)
+}
+
+// Send to WebSocket when atom changes
+store.sub(countAtom, () => {
+  ws.send(JSON.stringify({ count: store.get(countAtom) }))
+})
+```
+
+### Server-Side Rendering
+
+Create a store per request in SSR:
+
+```tsx
+import { createStore, Provider } from 'jotai'
+import { renderToString } from 'react-dom/server'
+import { App } from './App'
+import { userAtom } from './atoms'
+
+app.get('/', (req, res) => {
+  const store = createStore()
+  
+  // Initialize with server-side data
+  store.set(userAtom, req.user)
+  
+  const html = renderToString(
+    <Provider store={store}>
+      <App />
+    </Provider>
+  )
+  
+  res.send(html)
+})
+```
+
+### Testing
+
+Create isolated stores for testing:
+
+```typescript
+import { createStore } from 'jotai'
+import { countAtom, doubleCountAtom } from './atoms'
+
+test('doubleCountAtom returns double the count', () => {
+  const store = createStore()
+  
+  store.set(countAtom, 5)
+  expect(store.get(doubleCountAtom)).toBe(10)
+  
+  store.set(countAtom, 10)
+  expect(store.get(doubleCountAtom)).toBe(20)
+})
+```
+
+### Vanilla JavaScript Integration
+
+Use Jotai's state management without React:
+
+```typescript
+import { atom, createStore } from 'jotai/vanilla'
+
+const countAtom = atom(0)
+const store = createStore()
+
+// Subscribe to changes
+store.sub(countAtom, () => {
+  document.getElementById('count').textContent = store.get(countAtom)
+})
+
+// Update on button click
+document.getElementById('increment').addEventListener('click', () => {
+  store.set(countAtom, (c) => c + 1)
+})
+```
+
+## Advanced: Store Internals
+
+### Custom Store Implementation
+
+You can override the default store creation:
+
+```typescript
+import { INTERNAL_overrideCreateStore } from 'jotai'
+
+INTERNAL_overrideCreateStore((prev) => {
+  return () => {
+    const store = prev ? prev() : createStore()
+    // Customize store behavior
+    return store
+  }
+})
+```
+
+<Warning>
+  `INTERNAL_overrideCreateStore` is an internal API and may change without notice. Use at your own risk.
+</Warning>
+
+### Store Implementation
+
+The store is built using internal building blocks:
+
+```typescript
+import { INTERNAL_buildStoreRev2 as INTERNAL_buildStore } from './internals.ts'
+
+export function createStore(): Store {
+  if (overriddenCreateStore) {
+    return overriddenCreateStore()
+  }
+  return INTERNAL_buildStore()
+}
+```
+
+## Using Store with Provider
+
+Pass a custom store to a Provider:
+
+```tsx
+import { createStore, Provider, atom, useAtom } from 'jotai'
+
+const myStore = createStore()
+const countAtom = atom(0)
+
+// Initialize the store
+myStore.set(countAtom, 10)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  return (
+    <div>
+      <p>{count}</p>
+      <button onClick={() => setCount(c => c + 1)}>+</button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <Provider store={myStore}>
+      <Counter /> {/* Starts at 10 */}
+    </Provider>
+  )
+}
+```
+
+## Best Practices
+
+<Tip>
+  Create a new store for each request in SSR environments to prevent state leakage between users.
+</Tip>
+
+<Tip>
+  Use `store.sub` for reactive programming patterns outside of React components.
+</Tip>
+
+<Warning>
+  When using `getDefaultStore()`, be aware that all components without a `Provider` will share this global store.
+</Warning>
+
+<Tip>
+  In tests, always create a new store for each test case to ensure test isolation.
+</Tip>
+
+## Examples
+
+### Sync State with localStorage
+
+```typescript
+import { atom, createStore } from 'jotai'
+
+const store = createStore()
+const countAtom = atom(0)
+
+// Load from localStorage
+const saved = localStorage.getItem('count')
+if (saved) {
+  store.set(countAtom, JSON.parse(saved))
+}
+
+// Save to localStorage on changes
+store.sub(countAtom, () => {
+  localStorage.setItem('count', JSON.stringify(store.get(countAtom)))
+})
+```
+
+### Debugging
+
+```typescript
+import { createStore } from 'jotai'
+import { countAtom } from './atoms'
+
+const store = createStore()
+
+// Log all changes to countAtom
+if (process.env.NODE_ENV === 'development') {
+  store.sub(countAtom, () => {
+    console.log('[DEBUG] countAtom changed:', store.get(countAtom))
+  })
+}
+```
+
+### Event-Driven Updates
+
+```typescript
+import { atom, createStore } from 'jotai'
+
+const notificationAtom = atom<string | null>(null)
+const store = createStore()
+
+// Listen for custom events
+window.addEventListener('notification', (event: CustomEvent) => {
+  store.set(notificationAtom, event.detail.message)
+  
+  // Auto-clear after 3 seconds
+  setTimeout(() => {
+    store.set(notificationAtom, null)
+  }, 3000)
+})
+```

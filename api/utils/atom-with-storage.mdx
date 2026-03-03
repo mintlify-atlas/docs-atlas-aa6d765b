@@ -1,0 +1,164 @@
+---
+title: atomWithStorage
+description: API reference for atomWithStorage utility
+---
+
+`atomWithStorage` creates an atom that persists its value to storage (e.g., localStorage, AsyncStorage).
+
+## Import
+
+```typescript
+import { atomWithStorage } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+// Async storage overload
+function atomWithStorage<Value>(
+  key: string,
+  initialValue: Value,
+  storage: AsyncStorage<Value>,
+  options?: { getOnInit?: boolean },
+): WritableAtom<
+  Value | Promise<Value>,
+  [SetStateActionWithReset<Value | Promise<Value>>],
+  Promise<void>
+>
+
+// Sync storage overload (default)
+function atomWithStorage<Value>(
+  key: string,
+  initialValue: Value,
+  storage?: SyncStorage<Value>,
+  options?: { getOnInit?: boolean },
+): WritableAtom<Value, [SetStateActionWithReset<Value>], void>
+```
+
+## Parameters
+
+<ParamField path="key" type="string" required>
+  The storage key to use for persistence
+</ParamField>
+
+<ParamField path="initialValue" type="Value" required>
+  The initial value of the atom
+</ParamField>
+
+<ParamField path="storage" type="SyncStorage<Value> | AsyncStorage<Value>">
+  The storage object to use. Defaults to `createJSONStorage()` which uses localStorage
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional configuration object
+  
+  <ParamField path="options.getOnInit" type="boolean">
+    If true, gets the value from storage immediately on initialization. Defaults to false
+  </ParamField>
+</ParamField>
+
+## Return Value
+
+Returns a writable atom that:
+- Reads from storage when mounted
+- Writes updates to storage automatically
+- Supports `RESET` to remove the item from storage and reset to initial value
+
+## Usage Example
+
+```typescript
+import { atomWithStorage } from 'jotai/utils'
+
+// Basic usage with localStorage (default)
+const darkModeAtom = atomWithStorage('darkMode', false)
+
+// With custom storage
+import { createJSONStorage } from 'jotai/utils'
+
+const storage = createJSONStorage(() => sessionStorage)
+const sessionAtom = atomWithStorage('session', null, storage)
+
+// With AsyncStorage (React Native)
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { createJSONStorage } from 'jotai/utils'
+
+const asyncStorage = createJSONStorage(() => AsyncStorage)
+const userAtom = atomWithStorage('user', { name: 'Guest' }, asyncStorage)
+
+// Resetting to initial value
+import { RESET } from 'jotai/utils'
+
+function ResetButton() {
+  const [, setDarkMode] = useAtom(darkModeAtom)
+  return <button onClick={() => setDarkMode(RESET)}>Reset</button>
+}
+```
+
+## Storage Interface
+
+### SyncStorage
+
+```typescript
+interface SyncStorage<Value> {
+  getItem: (key: string, initialValue: Value) => Value
+  setItem: (key: string, newValue: Value) => void
+  removeItem: (key: string) => void
+  subscribe?: (key: string, callback: (value: Value) => void, initialValue: Value) => (() => void) | undefined
+}
+```
+
+### AsyncStorage
+
+```typescript
+interface AsyncStorage<Value> {
+  getItem: (key: string, initialValue: Value) => PromiseLike<Value>
+  setItem: (key: string, newValue: Value) => PromiseLike<void>
+  removeItem: (key: string) => PromiseLike<void>
+  subscribe?: (key: string, callback: (value: Value) => void, initialValue: Value) => (() => void) | undefined
+}
+```
+
+## Helper Functions
+
+### createJSONStorage
+
+Creates a storage object that serializes/deserializes values as JSON.
+
+```typescript
+// Default (uses localStorage)
+const storage = createJSONStorage()
+
+// With custom string storage
+const storage = createJSONStorage(() => sessionStorage)
+
+// With JSON options
+const storage = createJSONStorage(
+  () => localStorage,
+  {
+    reviver: (key, value) => /* custom deserialization */,
+    replacer: (key, value) => /* custom serialization */
+  }
+)
+```
+
+### withStorageValidator
+
+Validates storage values with a type guard.
+
+```typescript
+import { withStorageValidator } from 'jotai/utils'
+
+const isUser = (value: unknown): value is User => {
+  return typeof value === 'object' && value !== null && 'name' in value
+}
+
+const validatedStorage = withStorageValidator(isUser)(storage)
+const userAtom = atomWithStorage('user', defaultUser, validatedStorage)
+```
+
+## Notes
+
+- The atom automatically subscribes to storage changes when mounted (for storages that support it)
+- When using sync storage, the value is read from storage on mount, not on initialization (unless `getOnInit: true`)
+- Setting the atom to `RESET` removes the item from storage and reverts to the initial value
+- The default storage uses `window.localStorage` and is only available in browser environments

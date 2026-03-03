@@ -1,0 +1,275 @@
+---
+title: getDefaultStore
+description: Get the default global Jotai store instance
+---
+
+The `getDefaultStore` function returns the default global store instance. This is the store used when atoms are used without a Provider.
+
+## Signature
+
+```typescript
+function getDefaultStore(): Store
+```
+
+### Type Definitions
+
+```typescript
+type Store = {
+  get: <Value>(atom: Atom<Value>) => Value
+  set: <Value, Args extends unknown[], Result>(
+    atom: WritableAtom<Value, Args, Result>,
+    ...args: Args
+  ) => Result
+  sub: (atom: AnyAtom, listener: () => void) => () => void
+}
+```
+
+## Parameters
+
+No parameters.
+
+## Returns
+
+<ResponseField name="store" type="Store">
+  The default global store instance. If it doesn't exist yet, it will be created on first access.
+  
+  <Expandable title="Store Methods">
+    <ResponseField name="get" type="<Value>(atom: Atom<Value>) => Value">
+      Reads an atom's value from the default store.
+    </ResponseField>
+    
+    <ResponseField name="set" type="<Value, Args, Result>(atom: WritableAtom<Value, Args, Result>, ...args: Args) => Result">
+      Writes to an atom in the default store.
+    </ResponseField>
+    
+    <ResponseField name="sub" type="(atom: Atom, listener: () => void) => () => void">
+      Subscribes to atom changes in the default store. Returns an unsubscribe function.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { getDefaultStore, atom } from 'jotai'
+
+const countAtom = atom(0)
+const store = getDefaultStore()
+
+// Get value
+console.log(store.get(countAtom)) // 0
+
+// Set value
+store.set(countAtom, 1)
+console.log(store.get(countAtom)) // 1
+```
+
+### Outside React
+
+```typescript
+import { getDefaultStore, atom } from 'jotai'
+
+const userAtom = atom({ name: 'Guest' })
+
+// Access store in vanilla JS
+function updateUser(name: string) {
+  const store = getDefaultStore()
+  store.set(userAtom, { name })
+}
+
+function getUser() {
+  const store = getDefaultStore()
+  return store.get(userAtom)
+}
+
+updateUser('Alice')
+console.log(getUser()) // { name: 'Alice' }
+```
+
+### Subscribe to Changes
+
+```typescript
+import { getDefaultStore, atom } from 'jotai'
+
+const themeAtom = atom('light')
+const store = getDefaultStore()
+
+// Subscribe to theme changes
+const unsub = store.sub(themeAtom, () => {
+  const theme = store.get(themeAtom)
+  document.body.className = theme
+})
+
+store.set(themeAtom, 'dark') // Updates body class
+
+// Cleanup
+unsub()
+```
+
+### Sync with External State
+
+```typescript
+import { getDefaultStore, atom } from 'jotai'
+
+const tokenAtom = atom<string | null>(null)
+const store = getDefaultStore()
+
+// Initialize from localStorage
+const savedToken = localStorage.getItem('token')
+if (savedToken) {
+  store.set(tokenAtom, savedToken)
+}
+
+// Sync changes to localStorage
+store.sub(tokenAtom, () => {
+  const token = store.get(tokenAtom)
+  if (token) {
+    localStorage.setItem('token', token)
+  } else {
+    localStorage.removeItem('token')
+  }
+})
+```
+
+### Debug Utility
+
+```typescript
+import { getDefaultStore, atom } from 'jotai'
+
+const countAtom = atom(0)
+const nameAtom = atom('John')
+
+// Debug helper
+function debugAtoms() {
+  const store = getDefaultStore()
+
+  console.log('Current state:')
+  console.log('count:', store.get(countAtom))
+  console.log('name:', store.get(nameAtom))
+}
+
+// Call from browser console
+window.debugAtoms = debugAtoms
+```
+
+### Integration with DevTools
+
+```typescript
+import { getDefaultStore, atom } from 'jotai'
+
+const stateAtom = atom({ count: 0 })
+
+// Expose to window for debugging
+if (typeof window !== 'undefined') {
+  window.__JOTAI_STORE__ = getDefaultStore()
+}
+
+// Now you can inspect in console:
+// window.__JOTAI_STORE__.get(stateAtom)
+```
+
+### Server-Side Check
+
+```typescript
+import { getDefaultStore, atom } from 'jotai'
+
+const configAtom = atom({ apiUrl: '' })
+
+function initializeConfig(apiUrl: string) {
+  // Only use default store on client
+  if (typeof window !== 'undefined') {
+    const store = getDefaultStore()
+    store.set(configAtom, { apiUrl })
+  }
+}
+```
+
+### Multiple Instance Warning
+
+```typescript
+import { getDefaultStore } from 'jotai'
+
+const store1 = getDefaultStore()
+const store2 = getDefaultStore()
+
+console.log(store1 === store2) // true - same instance
+
+// In development, Jotai warns if multiple Jotai instances are detected
+// This can happen with duplicate dependencies in your bundle
+```
+
+### Imperative Updates
+
+```typescript
+import { getDefaultStore, atom, useAtomValue } from 'jotai'
+
+const notificationsAtom = atom<string[]>([])
+
+// Function to add notification from anywhere
+export function notify(message: string) {
+  const store = getDefaultStore()
+  const current = store.get(notificationsAtom)
+  store.set(notificationsAtom, [...current, message])
+}
+
+// Use in React
+function Notifications() {
+  const notifications = useAtomValue(notificationsAtom)
+
+  return (
+    <div>
+      {notifications.map((msg, i) => (
+        <div key={i}>{msg}</div>
+      ))}
+    </div>
+  )
+}
+
+// Use anywhere
+notify('Hello!') // Component will re-render
+```
+
+### Without Provider
+
+```typescript
+import { atom, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+function Counter() {
+  // Automatically uses getDefaultStore() internally
+  const [count, setCount] = useAtom(countAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>Increment</button>
+    </div>
+  )
+}
+
+// No Provider needed - uses default store
+function App() {
+  return <Counter />
+}
+```
+
+## Notes
+
+- The default store is created lazily on first access
+- The same instance is returned on every call (singleton pattern)
+- In development mode, Jotai warns if multiple Jotai instances are detected (e.g., from duplicate packages)
+- The default store is stored globally at `globalThis.__JOTAI_DEFAULT_STORE__` in development
+- When using a Provider without a custom store, hooks still use the Provider's store, not the default store
+- Useful for imperative updates outside of React components
+- Not recommended for SSR - use Provider with a custom store per request instead
+- The default store persists for the lifetime of the application
+
+## Related APIs
+
+- [createStore](/api/create-store) - Create a custom store instance
+- [Provider](/api/provider) - Provide a custom store to React components
+- [atom](/api/atom) - Create atoms
+- [useAtom](/api/use-atom) - Use atoms in React components

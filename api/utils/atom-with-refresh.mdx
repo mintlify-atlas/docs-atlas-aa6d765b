@@ -1,0 +1,195 @@
+---
+title: atomWithRefresh
+description: API reference for atomWithRefresh utility
+---
+
+`atomWithRefresh` creates an atom that can be manually refreshed to re-execute its read function.
+
+## Import
+
+```typescript
+import { atomWithRefresh } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+// Read-only overload
+function atomWithRefresh<Value>(
+  read: (get: Getter, options: Options) => Value,
+): WritableAtom<Value, [], void>
+
+// Writable overload
+function atomWithRefresh<Value, Args extends unknown[], Result>(
+  read: (get: Getter, options: Options) => Value,
+  write: (get: Getter, set: Setter, ...args: Args) => Result,
+): WritableAtom<Value, Args | [], Result | void>
+```
+
+## Parameters
+
+<ParamField path="read" type="(get: Getter, options: Options) => Value" required>
+  The read function that computes the atom's value. This function is re-executed when the atom is refreshed
+</ParamField>
+
+<ParamField path="write" type="(get: Getter, set: Setter, ...args: Args) => Result">
+  Optional write function for custom write behavior. If omitted, the atom only supports refresh (empty args)
+</ParamField>
+
+## Return Value
+
+Returns a writable atom that:
+- Reads using the provided `read` function
+- Can be written to with no arguments to trigger a refresh
+- Can be written to with arguments if a custom `write` function was provided
+
+## Usage Example
+
+```typescript
+import { useAtom } from 'jotai'
+import { atomWithRefresh } from 'jotai/utils'
+
+const timestampAtom = atomWithRefresh(() => Date.now())
+
+function Timestamp() {
+  const [timestamp, refresh] = useAtom(timestampAtom)
+
+  return (
+    <div>
+      <p>Current time: {new Date(timestamp).toLocaleTimeString()}</p>
+      <button onClick={() => refresh()}>Refresh</button>
+    </div>
+  )
+}
+```
+
+## Async Data Fetching
+
+```typescript
+import { atomWithRefresh } from 'jotai/utils'
+
+const userAtom = atomWithRefresh(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+function UserProfile() {
+  const [user, refresh] = useAtom(userAtom)
+
+  return (
+    <div>
+      <h1>{user.name}</h1>
+      <button onClick={() => refresh()}>Refresh User Data</button>
+    </div>
+  )
+}
+```
+
+## With Dependencies
+
+```typescript
+import { atom } from 'jotai'
+import { atomWithRefresh } from 'jotai/utils'
+
+const userIdAtom = atom(1)
+
+const userDataAtom = atomWithRefresh(async (get) => {
+  const userId = get(userIdAtom)
+  const response = await fetch(`/api/users/${userId}`)
+  return response.json()
+})
+
+function UserComponent() {
+  const [userId, setUserId] = useAtom(userIdAtom)
+  const [userData, refreshUserData] = useAtom(userDataAtom)
+
+  return (
+    <div>
+      <select value={userId} onChange={(e) => setUserId(Number(e.target.value))}>
+        <option value={1}>User 1</option>
+        <option value={2}>User 2</option>
+      </select>
+      <p>{userData.name}</p>
+      <button onClick={() => refreshUserData()}>Force Refresh</button>
+    </div>
+  )
+}
+```
+
+## With Custom Write Function
+
+```typescript
+import { atomWithRefresh } from 'jotai/utils'
+
+const dataAtom = atomWithRefresh(
+  async () => {
+    const response = await fetch('/api/data')
+    return response.json()
+  },
+  async (get, set, newData: any) => {
+    // Custom write: update server then refresh
+    await fetch('/api/data', {
+      method: 'POST',
+      body: JSON.stringify(newData),
+    })
+    // Refresh to get updated data from server
+    set(dataAtom) // Empty call triggers refresh
+  }
+)
+
+function DataEditor() {
+  const [data, updateData] = useAtom(dataAtom)
+
+  const handleSave = async () => {
+    await updateData({ ...data, modified: true })
+  }
+
+  const handleRefresh = () => {
+    updateData() // No args = refresh
+  }
+
+  return (
+    <div>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+      <button onClick={handleSave}>Save</button>
+      <button onClick={handleRefresh}>Refresh</button>
+    </div>
+  )
+}
+```
+
+## Periodic Refresh
+
+```typescript
+import { useAtom } from 'jotai'
+import { atomWithRefresh } from 'jotai/utils'
+import { useEffect } from 'react'
+
+const liveDataAtom = atomWithRefresh(async () => {
+  const response = await fetch('/api/live-data')
+  return response.json()
+})
+
+function LiveDashboard() {
+  const [data, refresh] = useAtom(liveDataAtom)
+
+  useEffect(() => {
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(() => {
+      refresh()
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [refresh])
+
+  return <div>Live Data: {JSON.stringify(data)}</div>
+}
+```
+
+## Notes
+
+- Calling the atom's setter with no arguments triggers a refresh
+- The read function is re-executed completely, not just re-evaluated
+- Useful for polling, manual refresh, or cache invalidation patterns
+- Works with both sync and async read functions
+- If a custom write function is provided and you call it with no arguments, it triggers a refresh (not the write function)

@@ -1,0 +1,179 @@
+---
+title: atom
+description: Create primitive and derived atoms
+---
+
+The `atom` function creates atoms, which are the building blocks of state in Jotai. Atoms represent a piece of state and can be either primitive (writable) or derived (read-only or writable).
+
+## Signature
+
+```typescript
+// Primitive atom
+function atom<Value>(initialValue: Value): PrimitiveAtom<Value>
+
+// Primitive atom without initial value
+function atom<Value>(): PrimitiveAtom<Value | undefined>
+
+// Read-only derived atom
+function atom<Value>(read: Read<Value>): Atom<Value>
+
+// Writable derived atom
+function atom<Value, Args extends unknown[], Result>(
+  read: Read<Value, SetAtom<Args, unknown>>,
+  write: Write<Args, Result>,
+): WritableAtom<Value, Args, Result>
+
+// Write-only derived atom
+function atom<Value, Args extends unknown[], Result>(
+  initialValue: Value,
+  write: Write<Args, Result>,
+): WritableAtom<Value, Args, Result>
+```
+
+### Type Definitions
+
+```typescript
+type Getter = <Value>(atom: Atom<Value>) => Value
+
+type Setter = <Value, Args extends unknown[], Result>(
+  atom: WritableAtom<Value, Args, Result>,
+  ...args: Args
+) => Result
+
+type Read<Value, SetSelf = never> = (
+  get: Getter,
+  options: { readonly signal: AbortSignal; readonly setSelf: SetSelf },
+) => Value
+
+type Write<Args extends unknown[], Result> = (
+  get: Getter,
+  set: Setter,
+  ...args: Args
+) => Result
+
+type SetStateAction<Value> = Value | ((prev: Value) => Value)
+
+type PrimitiveAtom<Value> = WritableAtom<
+  Value,
+  [SetStateAction<Value>],
+  void
+>
+```
+
+## Parameters
+
+<ParamField path="initialValue" type="Value" optional>
+  The initial value for a primitive atom. When provided alone, creates a writable atom.
+</ParamField>
+
+<ParamField path="read" type="Read<Value>">
+  A function that computes the atom's value. Receives:
+  - `get`: Function to read other atoms
+  - `options.signal`: AbortSignal for cleanup
+  - `options.setSelf`: (Deprecated) Self-update function
+</ParamField>
+
+<ParamField path="write" type="Write<Args, Result>">
+  A function that handles atom updates. Receives:
+  - `get`: Function to read other atoms
+  - `set`: Function to write to other atoms
+  - `...args`: Arguments passed when updating the atom
+</ParamField>
+
+## Returns
+
+<ResponseField name="atom" type="Atom<Value> | WritableAtom<Value, Args, Result>">
+  An atom configuration object with:
+  - `read`: The read function
+  - `write`: The write function (if writable)
+  - `toString()`: Returns a debug identifier
+  - `debugLabel`: Optional debug label
+</ResponseField>
+
+## Examples
+
+### Primitive Atom
+
+```typescript
+import { atom } from 'jotai'
+
+// With initial value
+const countAtom = atom(0)
+
+// Without initial value
+const optionalAtom = atom<number>()
+```
+
+### Read-only Derived Atom
+
+```typescript
+import { atom } from 'jotai'
+
+const countAtom = atom(0)
+const doubledAtom = atom((get) => get(countAtom) * 2)
+```
+
+### Writable Derived Atom
+
+```typescript
+import { atom } from 'jotai'
+
+const countAtom = atom(0)
+
+const incrementAtom = atom(
+  (get) => get(countAtom),
+  (get, set, amount: number) => {
+    set(countAtom, get(countAtom) + amount)
+  }
+)
+```
+
+### Write-only Derived Atom
+
+```typescript
+import { atom } from 'jotai'
+
+const countAtom = atom(0)
+
+const incrementAtom = atom(
+  null, // Initial value (won't be read)
+  (get, set) => {
+    set(countAtom, get(countAtom) + 1)
+  }
+)
+```
+
+### Async Atom
+
+```typescript
+import { atom } from 'jotai'
+
+const userIdAtom = atom(1)
+
+const userAtom = atom(async (get) => {
+  const userId = get(userIdAtom)
+  const response = await fetch(`/api/users/${userId}`)
+  return response.json()
+})
+```
+
+### Using AbortSignal
+
+```typescript
+import { atom } from 'jotai'
+
+const queryAtom = atom('react')
+
+const searchAtom = atom(async (get, { signal }) => {
+  const query = get(queryAtom)
+  const response = await fetch(`/api/search?q=${query}`, { signal })
+  return response.json()
+})
+```
+
+## Related APIs
+
+- [useAtom](/api/use-atom) - Hook to read and write atom values
+- [useAtomValue](/api/use-atom-value) - Hook to read atom values
+- [useSetAtom](/api/use-set-atom) - Hook to write atom values
+- [createStore](/api/create-store) - Create a store instance

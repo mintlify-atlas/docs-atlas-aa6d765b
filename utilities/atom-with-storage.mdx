@@ -1,0 +1,145 @@
+---
+title: atomWithStorage
+description: Create an atom that syncs with localStorage, sessionStorage, or AsyncStorage
+---
+
+`atomWithStorage` creates an atom that persists its value to storage (localStorage, sessionStorage, or custom storage) and synchronizes across browser tabs.
+
+## Signature
+
+```ts
+function atomWithStorage<Value>(
+  key: string,
+  initialValue: Value,
+  storage?: SyncStorage<Value> | AsyncStorage<Value>,
+  options?: { getOnInit?: boolean }
+): WritableAtom<Value, [SetStateActionWithReset<Value>], void>
+```
+
+<ParamField path="key" type="string" required>
+  The storage key to use for persisting the value
+</ParamField>
+
+<ParamField path="initialValue" type="Value" required>
+  The initial value if no value exists in storage
+</ParamField>
+
+<ParamField path="storage" type="SyncStorage<Value> | AsyncStorage<Value>">
+  Custom storage implementation. Defaults to `localStorage` with JSON serialization
+</ParamField>
+
+<ParamField path="options.getOnInit" type="boolean">
+  Whether to get the value from storage on initialization. Defaults to `false` (gets value on mount)
+</ParamField>
+
+## Usage
+
+### Basic usage with localStorage
+
+```tsx
+import { atomWithStorage } from 'jotai/utils'
+
+// Automatically syncs with localStorage
+const darkModeAtom = atomWithStorage('darkMode', false)
+
+function ThemeToggle() {
+  const [darkMode, setDarkMode] = useAtom(darkModeAtom)
+  
+  return (
+    <button onClick={() => setDarkMode(!darkMode)}>
+      {darkMode ? 'Light' : 'Dark'} Mode
+    </button>
+  )
+}
+```
+
+### Resetting to initial value
+
+```tsx
+import { atomWithStorage, RESET } from 'jotai/utils'
+
+const countAtom = atomWithStorage('count', 0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  
+  return (
+    <>
+      <div>Count: {count}</div>
+      <button onClick={() => setCount(c => c + 1)}>Increment</button>
+      <button onClick={() => setCount(RESET)}>Reset</button>
+    </>
+  )
+}
+```
+
+### Custom storage implementation
+
+```tsx
+import { atomWithStorage } from 'jotai/utils'
+import type { SyncStorage } from 'jotai/vanilla/utils/atomWithStorage'
+
+const customStorage: SyncStorage<number> = {
+  getItem: (key, initialValue) => {
+    const value = sessionStorage.getItem(key)
+    return value ? Number(value) : initialValue
+  },
+  setItem: (key, value) => {
+    sessionStorage.setItem(key, String(value))
+  },
+  removeItem: (key) => {
+    sessionStorage.removeItem(key)
+  },
+}
+
+const countAtom = atomWithStorage('count', 0, customStorage)
+```
+
+### Async storage (React Native)
+
+```tsx
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { atomWithStorage, createJSONStorage } from 'jotai/utils'
+
+const storage = createJSONStorage<string>(() => AsyncStorage)
+const userAtom = atomWithStorage('user', 'guest', storage)
+```
+
+### Storage validation
+
+```tsx
+import { atomWithStorage, createJSONStorage, withStorageValidator } from 'jotai/utils'
+
+interface User {
+  name: string
+  age: number
+}
+
+const isUser = (value: unknown): value is User =>
+  typeof value === 'object' &&
+  value !== null &&
+  'name' in value &&
+  'age' in value
+
+const storage = withStorageValidator(isUser)(createJSONStorage<User>())
+const userAtom = atomWithStorage<User>(
+  'user',
+  { name: 'Guest', age: 0 },
+  storage
+)
+```
+
+## Features
+
+- **Cross-tab synchronization**: Changes in one tab automatically sync to other tabs
+- **Reset support**: Use `RESET` symbol to reset to initial value and remove from storage
+- **Custom storage**: Works with any storage implementation (localStorage, sessionStorage, AsyncStorage)
+- **Type-safe**: Full TypeScript support with custom storage validators
+- **SSR-safe**: Gracefully handles server-side rendering where storage is unavailable
+
+## Notes
+
+- By default, the atom loads the value from storage on mount, not on initialization
+- Use `getOnInit: true` to load the value immediately during initialization
+- The default storage uses `localStorage` with JSON serialization
+- Storage subscription allows automatic synchronization across browser tabs

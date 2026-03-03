@@ -1,0 +1,135 @@
+---
+title: useAtomValue
+description: Read atom values in React components
+---
+
+`useAtomValue` is a React hook that reads the value of an atom. It subscribes to the atom and triggers a re-render when the atom's value changes.
+
+## When to use it
+
+Use `useAtomValue` when you only need to read an atom's value without modifying it. This is more efficient than `useAtom` when you don't need the setter function.
+
+## Signature
+
+```ts
+function useAtomValue<Value>(
+  atom: Atom<Value>,
+  options?: Options
+): Awaited<Value>
+```
+
+### Parameters
+
+- `atom`: The atom to read from
+- `options`: Optional configuration object
+  - `store`: Custom store to use (defaults to the store from Provider)
+  - `delay`: Delay in milliseconds before re-rendering
+  - `unstable_promiseStatus`: Enable promise status tracking (experimental)
+
+### Returns
+
+The current value of the atom. If the atom value is a promise, it will be awaited using React Suspense.
+
+## Basic Usage
+
+```tsx
+import { atom } from 'jotai'
+import { useAtomValue } from 'jotai/react'
+
+const countAtom = atom(0)
+
+function Counter() {
+  const count = useAtomValue(countAtom)
+  return <div>Count: {count}</div>
+}
+```
+
+## With Async Atoms
+
+`useAtomValue` works seamlessly with async atoms using React Suspense:
+
+```tsx
+import { atom } from 'jotai'
+import { useAtomValue } from 'jotai/react'
+import { Suspense } from 'react'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+function UserProfile() {
+  const user = useAtomValue(userAtom)
+  return <div>Welcome, {user.name}!</div>
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UserProfile />
+    </Suspense>
+  )
+}
+```
+
+## With Derived Atoms
+
+```tsx
+import { atom } from 'jotai'
+import { useAtomValue } from 'jotai/react'
+
+const priceAtom = atom(100)
+const taxRateAtom = atom(0.2)
+
+const totalPriceAtom = atom((get) => {
+  const price = get(priceAtom)
+  const taxRate = get(taxRateAtom)
+  return price * (1 + taxRate)
+})
+
+function PriceDisplay() {
+  const total = useAtomValue(totalPriceAtom)
+  return <div>Total: ${total}</div>
+}
+```
+
+## Comparison with useAtom
+
+`useAtomValue` is more efficient than `useAtom` when you don't need to update the atom:
+
+```tsx
+// Only need to read - use useAtomValue
+const count = useAtomValue(countAtom)
+
+// Need both read and write - use useAtom
+const [count, setCount] = useAtom(countAtom)
+
+// Only need to write - use useSetAtom
+const setCount = useSetAtom(countAtom)
+```
+
+## Delay Option
+
+The `delay` option can help batch updates or wait for async values:
+
+```tsx
+function Component() {
+  // Wait 100ms before re-rendering
+  const value = useAtomValue(myAtom, { delay: 100 })
+  return <div>{value}</div>
+}
+```
+
+## TypeScript
+
+`useAtomValue` is fully typed and infers the atom's value type:
+
+```tsx
+const numberAtom = atom(0)
+const stringAtom = atom('hello')
+
+function Component() {
+  const num = useAtomValue(numberAtom) // number
+  const str = useAtomValue(stringAtom) // string
+}
+```

@@ -1,0 +1,300 @@
+---
+title: unwrap
+description: Unwrap async atoms to use values without Suspense
+---
+
+`unwrap` creates an atom that unwraps a Promise value from an async atom, returning a fallback value while the Promise is pending.
+
+## Signature
+
+```ts
+function unwrap<Value, Args extends unknown[], Result>(
+  anAtom: WritableAtom<Value, Args, Result>,
+  fallback?: (prev?: Awaited<Value>) => PendingValue
+): WritableAtom<Awaited<Value> | PendingValue, Args, Result>
+
+function unwrap<Value>(
+  anAtom: Atom<Value>,
+  fallback?: (prev?: Awaited<Value>) => PendingValue
+): Atom<Awaited<Value> | PendingValue>
+```
+
+<ParamField path="anAtom" type="Atom<Value>" required>
+  The atom to unwrap (typically an async atom that returns a Promise)
+</ParamField>
+
+<ParamField path="fallback" type="(prev?: Awaited<Value>) => PendingValue">
+  Function that returns the fallback value while the Promise is pending. Receives the previous resolved value if available. Defaults to returning `undefined`
+</ParamField>
+
+## Usage
+
+### Basic async atom without suspense
+
+```tsx
+import { unwrap } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+const userUnwrappedAtom = unwrap(userAtom)
+
+function User() {
+  const user = useAtomValue(userUnwrappedAtom)
+  
+  if (user === undefined) {
+    return <div>Loading...</div>
+  }
+  
+  return <div>Hello, {user.name}!</div>
+}
+```
+
+### Custom loading state
+
+```tsx
+import { unwrap } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const dataAtom = atom(async () => {
+  const response = await fetch('/api/data')
+  return response.json()
+})
+
+const LOADING = { status: 'loading' } as const
+const dataUnwrappedAtom = unwrap(dataAtom, () => LOADING)
+
+function DataDisplay() {
+  const data = useAtomValue(dataUnwrappedAtom)
+  
+  if (data === LOADING) {
+    return <div>Loading data...</div>
+  }
+  
+  return <pre>{JSON.stringify(data, null, 2)}</pre>
+}
+```
+
+### Using previous value while revalidating
+
+```tsx
+import { unwrap } from 'jotai/utils'
+import { atom, useAtomValue, useSetAtom } from 'jotai'
+
+const queryAtom = atom('')
+
+const searchResultsAtom = atom(async (get) => {
+  const query = get(queryAtom)
+  if (!query) return []
+  
+  const response = await fetch(`/api/search?q=${query}`)
+  return response.json()
+})
+
+// Show previous results while loading new ones
+const unwrappedResultsAtom = unwrap(
+  searchResultsAtom,
+  (prev) => prev ?? []
+)
+
+function SearchResults() {
+  const results = useAtomValue(unwrappedResultsAtom)
+  const setQuery = useSetAtom(queryAtom)
+  
+  return (
+    <div>
+      <input
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search..."
+      />
+      {results.length === 0 ? (
+        <div>No results</div>
+      ) : (
+        <ul>
+          {results.map(result => (
+            <li key={result.id}>{result.title}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+```
+
+### With error handling
+
+```tsx
+import { unwrap } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const dataAtom = atom(async () => {
+  const response = await fetch('/api/data')
+  if (!response.ok) {
+    throw new Error('Failed to fetch')
+  }
+  return response.json()
+})
+
+const unwrappedAtom = unwrap(dataAtom)
+
+// Wrap in another atom to catch errors
+const dataWithErrorAtom = atom((get) => {
+  try {
+    return { data: get(unwrappedAtom), error: null }
+  } catch (error) {
+    return { data: undefined, error }
+  }
+})
+
+function DataDisplay() {
+  const { data, error } = useAtomValue(dataWithErrorAtom)
+  
+  if (error) {
+    return <div>Error: {error.message}</div>
+  }
+  
+  if (data === undefined) {
+    return <div>Loading...</div>
+  }
+  
+  return <div>{JSON.stringify(data)}</div>
+}
+```
+
+### Writable async atom
+
+```tsx
+import { unwrap } from 'jotai/utils'
+import { atom, useAtom } from 'jotai'
+
+const asyncCountAtom = atom(
+  async () => {
+    // Simulate async initial value
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    return 0
+  },
+  async (get, set, newValue: number) => {
+    // Async write
+    await new Promise(resolve => setTimeout(resolve, 500))
+    return newValue
+  }
+)
+
+const countUnwrappedAtom = unwrap(asyncCountAtom, () => 0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countUnwrappedAtom)
+  
+  return (
+    <div>
+      <div>Count: {count}</div>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+    </div>
+  )
+}
+```
+
+### Implementing loadable with unwrap
+
+```tsx
+import { unwrap } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const LOADING = { state: 'loading' } as const
+
+function loadable<T>(anAtom: Atom<T>) {
+  const unwrappedAtom = unwrap(anAtom, () => LOADING)
+  
+  return atom((get) => {
+    try {
+      const data = get(unwrappedAtom)
+      if (data === LOADING) {
+        return LOADING
+      }
+      return { state: 'hasData', data } as const
+    } catch (error) {
+      return { state: 'hasError', error } as const
+    }
+  })
+}
+
+const dataAtom = atom(async () => fetchData())
+const loadableAtom = loadable(dataAtom)
+
+function Component() {
+  const loadable = useAtomValue(loadableAtom)
+  
+  if (loadable.state === 'loading') return <div>Loading...</div>
+  if (loadable.state === 'hasError') return <div>Error</div>
+  return <div>{loadable.data}</div>
+}
+```
+
+### Multiple async atoms
+
+```tsx
+import { unwrap } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const userAtom = atom(async () => {
+  const res = await fetch('/api/user')
+  return res.json()
+})
+
+const postsAtom = atom(async () => {
+  const res = await fetch('/api/posts')
+  return res.json()
+})
+
+const userUnwrappedAtom = unwrap(userAtom)
+const postsUnwrappedAtom = unwrap(postsAtom)
+
+function Dashboard() {
+  const user = useAtomValue(userUnwrappedAtom)
+  const posts = useAtomValue(postsUnwrappedAtom)
+  
+  if (user === undefined || posts === undefined) {
+    return <div>Loading...</div>
+  }
+  
+  return (
+    <div>
+      <h1>Welcome, {user.name}!</h1>
+      <h2>Your posts:</h2>
+      <ul>
+        {posts.map(post => (
+          <li key={post.id}>{post.title}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+## Features
+
+- **No Suspense**: Avoids triggering React Suspense boundaries
+- **Fallback values**: Provide custom loading states or use previous values
+- **Writable support**: Works with writable async atoms
+- **Type-safe**: Full TypeScript support with proper type inference
+- **Previous value access**: Fallback function receives previous resolved value
+
+## Notes
+
+- Without a fallback, returns `undefined` while the Promise is pending
+- The fallback function is called every time the Promise is pending
+- If a previous value exists, it's passed to the fallback function
+- The unwrapped atom never suspends or throws during pending state
+- Errors are still thrown and can be caught with error boundaries or try/catch
+- For writable atoms, write operations are passed through to the original atom
+
+## Use cases
+
+- **Progressive loading**: Show previous data while fetching new data
+- **Custom loading states**: Use objects or symbols for loading indicators
+- **No Suspense**: When you can't or don't want to use React Suspense
+- **Incremental loading**: Show partial data while loading more
+- **Optimistic updates**: Display optimistic state during async operations

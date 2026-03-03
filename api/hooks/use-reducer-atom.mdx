@@ -1,0 +1,146 @@
+---
+title: useReducerAtom
+description: Use an atom with reducer-style updates
+---
+
+<Warning>
+  This hook is deprecated and will be removed in a future version. Please create your own version using the [recipe](https://github.com/pmndrs/jotai/pull/2467).
+</Warning>
+
+## useReducerAtom
+
+Provides a Redux-style reducer pattern for updating atom values.
+
+### Import
+
+```typescript
+import { useReducerAtom } from 'jotai/utils'
+```
+
+### Signature
+
+```typescript
+function useReducerAtom<Value, Action>(
+  anAtom: PrimitiveAtom<Value>,
+  reducer: (v: Value, a?: Action) => Value,
+  options?: Options
+): [Value, (action?: Action) => void]
+
+function useReducerAtom<Value, Action>(
+  anAtom: PrimitiveAtom<Value>,
+  reducer: (v: Value, a: Action) => Value,
+  options?: Options
+): [Value, (action: Action) => void]
+```
+
+### Parameters
+
+<ParamField path="anAtom" type="PrimitiveAtom<Value>" required>
+  A primitive atom to be used with the reducer.
+</ParamField>
+
+<ParamField path="reducer" type="(v: Value, a: Action) => Value" required>
+  A reducer function that takes the current value and an action, and returns the new value.
+</ParamField>
+
+<ParamField path="options" type="Options">
+  Optional configuration:
+  - `store`: Specify a custom store to use
+</ParamField>
+
+### Returns
+
+Returns a tuple containing:
+1. The current value of the atom
+2. A dispatch function to send actions to the reducer
+
+**Type:** `[Value, (action: Action) => void]`
+
+### Usage
+
+```typescript
+import { atom } from 'jotai'
+import { useReducerAtom } from 'jotai/utils'
+
+type Action = 
+  | { type: 'increment' }
+  | { type: 'decrement' }
+  | { type: 'set', value: number }
+
+const countAtom = atom(0)
+
+function reducer(state: number, action: Action) {
+  switch (action.type) {
+    case 'increment':
+      return state + 1
+    case 'decrement':
+      return state - 1
+    case 'set':
+      return action.value
+    default:
+      return state
+  }
+}
+
+function Counter() {
+  const [count, dispatch] = useReducerAtom(countAtom, reducer)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => dispatch({ type: 'increment' })}>+</button>
+      <button onClick={() => dispatch({ type: 'decrement' })}>-</button>
+      <button onClick={() => dispatch({ type: 'set', value: 0 })}>Reset</button>
+    </div>
+  )
+}
+```
+
+### Alternative (Recommended)
+
+Instead of using the deprecated `useReducerAtom`, create a custom atom with a reducer:
+
+```typescript
+import { atom, useAtom } from 'jotai'
+
+type Action = 
+  | { type: 'increment' }
+  | { type: 'decrement' }
+  | { type: 'set', value: number }
+
+const countAtom = atom(0)
+
+const countReducerAtom = atom(
+  (get) => get(countAtom),
+  (get, set, action: Action) => {
+    const state = get(countAtom)
+    switch (action.type) {
+      case 'increment':
+        set(countAtom, state + 1)
+        break
+      case 'decrement':
+        set(countAtom, state - 1)
+        break
+      case 'set':
+        set(countAtom, action.value)
+        break
+    }
+  }
+)
+
+function Counter() {
+  const [count, dispatch] = useAtom(countReducerAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => dispatch({ type: 'increment' })}>+</button>
+    </div>
+  )
+}
+```
+
+### Related APIs
+
+- [useAtom](/api/use-atom) - Core hook for reading and writing atoms
+- [atom](/api/core/atom) - Create atoms with custom read/write logic

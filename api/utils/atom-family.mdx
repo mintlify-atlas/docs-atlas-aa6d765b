@@ -1,0 +1,142 @@
+---
+title: atomFamily
+description: API reference for atomFamily utility
+---
+
+<Warning>
+  `atomFamily` is **deprecated** and will be removed in v3. Please use the [`jotai-family`](https://github.com/jotaijs/jotai-family) package instead.
+</Warning>
+
+`atomFamily` creates a function that returns atoms based on parameters. It's useful for creating atoms dynamically.
+
+## Migration
+
+```typescript
+// Before
+import { atomFamily } from 'jotai/utils'
+
+// After
+import { atomFamily } from 'jotai-family'
+```
+
+Install: `npm install jotai-family`
+
+## Import
+
+```typescript
+import { atomFamily } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+function atomFamily<Param, AtomType extends Atom<unknown>>(
+  initializeAtom: (param: Param) => AtomType,
+  areEqual?: (a: Param, b: Param) => boolean,
+): AtomFamily<Param, AtomType>
+
+interface AtomFamily<Param, AtomType> {
+  (param: Param): AtomType
+  getParams(): Iterable<Param>
+  remove(param: Param): void
+  setShouldRemove(shouldRemove: ShouldRemove<Param> | null): void
+  unstable_listen(callback: Callback<Param, AtomType>): Cleanup
+}
+```
+
+## Parameters
+
+<ParamField path="initializeAtom" type="(param: Param) => AtomType" required>
+  A function that creates an atom for a given parameter. The same atom instance is returned for equal parameters
+</ParamField>
+
+<ParamField path="areEqual" type="(a: Param, b: Param) => boolean">
+  Optional equality function to compare parameters. If not provided, uses reference equality (===)
+</ParamField>
+
+## Return Value
+
+Returns an `AtomFamily` function with these methods:
+
+- `(param)` - Returns the atom for the given parameter, creating it if needed
+- `getParams()` - Returns an iterable of all current parameters
+- `remove(param)` - Removes the atom for the given parameter
+- `setShouldRemove(fn)` - Sets a function to automatically remove old atoms
+- `unstable_listen(callback)` - Listens to atom creation/removal events (unstable API)
+
+## Usage Example
+
+```typescript
+import { atom } from 'jotai'
+import { atomFamily } from 'jotai/utils'
+
+// Create a family of atoms for user data
+const userAtomFamily = atomFamily((userId: number) =>
+  atom(async () => {
+    const response = await fetch(`/api/users/${userId}`)
+    return response.json()
+  })
+)
+
+function UserProfile({ userId }: { userId: number }) {
+  const [user] = useAtom(userAtomFamily(userId))
+  return <div>{user.name}</div>
+}
+
+// With custom equality
+const coordAtomFamily = atomFamily(
+  ({ x, y }: { x: number; y: number }) => atom({ x, y }),
+  (a, b) => a.x === b.x && a.y === b.y
+)
+
+// Managing the family
+const family = atomFamily((id: number) => atom(0))
+
+// Get all current parameters
+const params = Array.from(family.getParams())
+
+// Remove specific atom
+family.remove(123)
+
+// Auto-remove atoms older than 1 hour
+family.setShouldRemove((createdAt) => {
+  return Date.now() - createdAt > 60 * 60 * 1000
+})
+```
+
+## Advanced Usage
+
+### Listening to Events
+
+```typescript
+const family = atomFamily((id: number) => atom(0))
+
+const cleanup = family.unstable_listen((event) => {
+  console.log(event.type, event.param, event.atom)
+  // event.type: 'CREATE' | 'REMOVE'
+})
+
+// Later
+cleanup()
+```
+
+### Automatic Cleanup
+
+```typescript
+type ShouldRemove<Param> = (createdAt: number, param: Param) => boolean
+
+// Remove atoms that haven't been created in the last 5 minutes
+family.setShouldRemove((createdAt) => {
+  return Date.now() - createdAt > 5 * 60 * 1000
+})
+
+// Clear the cleanup function
+family.setShouldRemove(null)
+```
+
+## Notes
+
+- Atoms are cached and reused for equal parameters
+- The `createdAt` timestamp is in milliseconds since epoch
+- `unstable_listen` is for advanced use cases and may change without notice
+- This utility is deprecated; migrate to `jotai-family` for continued support

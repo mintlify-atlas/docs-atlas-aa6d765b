@@ -1,0 +1,236 @@
+---
+title: loadable
+description: Convert an async atom to a loadable atom with state tracking
+---
+
+<Warning>
+  **Deprecated**: `loadable` is deprecated in favor of `unwrap`. See the [migration guide](#migration-to-unwrap) below.
+</Warning>
+
+`loadable` creates an atom that wraps an async atom and provides loading, error, and data states without suspending.
+
+## Signature
+
+```ts
+function loadable<Value>(anAtom: Atom<Value>): Atom<Loadable<Value>>
+
+type Loadable<Value> =
+  | { state: 'loading' }
+  | { state: 'hasError'; error: unknown }
+  | { state: 'hasData'; data: Awaited<Value> }
+```
+
+<ParamField path="anAtom" type="Atom<Value>" required>
+  The atom to convert to a loadable atom (typically an async atom)
+</ParamField>
+
+## Usage
+
+### Basic async atom without suspense
+
+```tsx
+import { loadable } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const userAtom = atom(async () => {
+  const response = await fetch('/api/user')
+  return response.json()
+})
+
+const userLoadableAtom = loadable(userAtom)
+
+function User() {
+  const userLoadable = useAtomValue(userLoadableAtom)
+  
+  if (userLoadable.state === 'loading') {
+    return <div>Loading...</div>
+  }
+  
+  if (userLoadable.state === 'hasError') {
+    return <div>Error: {userLoadable.error.message}</div>
+  }
+  
+  return <div>Hello, {userLoadable.data.name}!</div>
+}
+```
+
+### Handling all states
+
+```tsx
+import { loadable } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const dataAtom = atom(async () => {
+  const response = await fetch('/api/data')
+  if (!response.ok) {
+    throw new Error('Failed to fetch')
+  }
+  return response.json()
+})
+
+const dataLoadableAtom = loadable(dataAtom)
+
+function DataDisplay() {
+  const loadable = useAtomValue(dataLoadableAtom)
+  
+  switch (loadable.state) {
+    case 'loading':
+      return (
+        <div className="spinner">
+          <div>Loading data...</div>
+        </div>
+      )
+    
+    case 'hasError':
+      return (
+        <div className="error">
+          <h3>Error occurred</h3>
+          <p>{loadable.error?.toString()}</p>
+        </div>
+      )
+    
+    case 'hasData':
+      return (
+        <div className="data">
+          <pre>{JSON.stringify(loadable.data, null, 2)}</pre>
+        </div>
+      )
+  }
+}
+```
+
+### Multiple loadable atoms
+
+```tsx
+import { loadable } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const userAtom = atom(async () => {
+  const res = await fetch('/api/user')
+  return res.json()
+})
+
+const postsAtom = atom(async () => {
+  const res = await fetch('/api/posts')
+  return res.json()
+})
+
+const userLoadableAtom = loadable(userAtom)
+const postsLoadableAtom = loadable(postsAtom)
+
+function Dashboard() {
+  const user = useAtomValue(userLoadableAtom)
+  const posts = useAtomValue(postsLoadableAtom)
+  
+  const isLoading = user.state === 'loading' || posts.state === 'loading'
+  const hasError = user.state === 'hasError' || posts.state === 'hasError'
+  
+  if (isLoading) {
+    return <div>Loading...</div>
+  }
+  
+  if (hasError) {
+    return <div>Error loading data</div>
+  }
+  
+  return (
+    <div>
+      <h1>Welcome, {user.data.name}!</h1>
+      <h2>Your posts:</h2>
+      <ul>
+        {posts.data.map(post => (
+          <li key={post.id}>{post.title}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+## Migration to unwrap
+
+The `loadable` utility is deprecated in favor of `unwrap`. Here's how to migrate:
+
+### Before (with loadable)
+
+```tsx
+import { loadable } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const dataAtom = atom(async () => fetchData())
+const loadableAtom = loadable(dataAtom)
+
+function Component() {
+  const loadable = useAtomValue(loadableAtom)
+  
+  if (loadable.state === 'loading') return <div>Loading...</div>
+  if (loadable.state === 'hasError') return <div>Error</div>
+  return <div>{loadable.data}</div>
+}
+```
+
+### After (with unwrap)
+
+```tsx
+import { unwrap } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+// Define the loading state
+const LOADING = { state: 'loading' } as const
+
+const dataAtom = atom(async () => fetchData())
+const unwrappedAtom = unwrap(dataAtom, () => LOADING)
+
+// Wrap in a derived atom to match loadable API
+const loadableAtom = atom((get) => {
+  try {
+    const data = get(unwrappedAtom)
+    if (data === LOADING) {
+      return LOADING
+    }
+    return { state: 'hasData', data } as const
+  } catch (error) {
+    return { state: 'hasError', error } as const
+  }
+})
+
+function Component() {
+  const loadable = useAtomValue(loadableAtom)
+  
+  if (loadable.state === 'loading') return <div>Loading...</div>
+  if (loadable.state === 'hasError') return <div>Error</div>
+  return <div>{loadable.data}</div>
+}
+```
+
+Or use `unwrap` directly with simpler state handling:
+
+```tsx
+import { unwrap } from 'jotai/utils'
+import { atom, useAtomValue } from 'jotai'
+
+const dataAtom = atom(async () => fetchData())
+const unwrappedAtom = unwrap(dataAtom, () => undefined)
+
+function Component() {
+  const data = useAtomValue(unwrappedAtom)
+  
+  if (data === undefined) return <div>Loading...</div>
+  return <div>{data}</div>
+}
+```
+
+## Features
+
+- **No suspense**: Doesn't trigger React Suspense boundaries
+- **Error handling**: Catches errors without Error Boundaries
+- **Type-safe states**: Discriminated union for type-safe state handling
+- **Progressive loading**: Handle loading states manually
+
+## Notes
+
+- This utility is deprecated and will be removed in v3
+- Use `unwrap` for new code (see migration guide above)
+- The loadable atom never suspends or throws
+- All states are available synchronously
+- For sync atoms, the state will always be `hasData`

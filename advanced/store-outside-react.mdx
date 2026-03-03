@@ -1,0 +1,369 @@
+---
+title: Using Store Outside React
+description: Access and mutate Jotai state outside of React components
+---
+
+While Jotai is designed for React, sometimes you need to interact with atom state from outside React components—such as in event handlers, WebSocket callbacks, or utility functions.
+
+## When to Use This Pattern
+
+Use store outside React when:
+- Handling non-React events (WebSocket messages, timers, etc.)
+- Integrating with third-party libraries
+- Writing tests
+- Server-side state manipulation
+- Building utilities that need state access
+
+<Warning>
+**Use sparingly**: Most state updates should happen through React components. Using stores outside React can make data flow harder to trace.
+</Warning>
+
+## Creating a Store
+
+Use `createStore()` to create a store instance:
+
+```jsx
+import { createStore, atom, Provider, useAtomValue } from 'jotai'
+
+const countAtom = atom(0)
+const store = createStore()
+
+// Access from outside React
+store.set(countAtom, 1)
+const count = store.get(countAtom)
+console.log(count) // 1
+
+// Use in React
+function Counter() {
+  const count = useAtomValue(countAtom)
+  return <div>Count: {count}</div>
+}
+
+function App() {
+  return (
+    <Provider store={store}>
+      <Counter />
+    </Provider>
+  )
+}
+```
+
+## Store API
+
+The store provides three core methods:
+
+### get(atom)
+
+Read the current value of an atom:
+
+```js
+const value = store.get(countAtom)
+```
+
+<Info>
+`get()` returns the current value synchronously. For async atoms, it returns the promise or the resolved value.
+</Info>
+
+### set(atom, ...args)
+
+Write to an atom:
+
+```js
+// Direct value
+store.set(countAtom, 5)
+
+// Update function
+store.set(countAtom, (prev) => prev + 1)
+
+// Write-only atom with arguments
+const incrementByAtom = atom(null, (get, set, amount: number) => {
+  set(countAtom, get(countAtom) + amount)
+})
+store.set(incrementByAtom, 10)
+```
+
+### sub(atom, callback)
+
+Subscribe to atom changes:
+
+```js
+const unsub = store.sub(countAtom, () => {
+  console.log('Count changed to:', store.get(countAtom))
+})
+
+// Later: unsubscribe
+unsub()
+```
+
+<Warning>
+**Always unsubscribe**: Forgetting to call `unsub()` will cause memory leaks.
+</Warning>
+
+## Common Patterns
+
+### WebSocket Integration
+
+```jsx
+import { createStore, atom, Provider } from 'jotai'
+
+const messagesAtom = atom([])
+const store = createStore()
+
+// Connect WebSocket
+const ws = new WebSocket('wss://example.com')
+
+ws.addEventListener('message', (event) => {
+  const message = JSON.parse(event.data)
+  // Update atom from outside React
+  store.set(messagesAtom, (prev) => [...prev, message])
+})
+
+// Cleanup
+ws.addEventListener('close', () => {
+  console.log('WebSocket closed')
+})
+
+function App() {
+  return (
+    <Provider store={store}>
+      <MessageList />
+    </Provider>
+  )
+}
+```
+
+### Timer/Interval Updates
+
+```jsx
+const timeAtom = atom(Date.now())
+const store = createStore()
+
+// Update time every second
+const intervalId = setInterval(() => {
+  store.set(timeAtom, Date.now())
+}, 1000)
+
+// Cleanup
+function cleanup() {
+  clearInterval(intervalId)
+}
+```
+
+### Event Bus
+
+```jsx
+import { createStore, atom } from 'jotai'
+
+const eventsAtom = atom([])
+const store = createStore()
+
+class EventBus {
+  emit(event) {
+    store.set(eventsAtom, (prev) => [...prev, event])
+  }
+  
+  subscribe(callback) {
+    return store.sub(eventsAtom, callback)
+  }
+}
+
+export const eventBus = new EventBus()
+```
+
+### Form Validation Utility
+
+```jsx
+import { createStore, atom } from 'jotai'
+
+const formAtom = atom({ email: '', password: '' })
+const errorsAtom = atom({})
+const store = createStore()
+
+function validateForm() {
+  const form = store.get(formAtom)
+  const errors = {}
+  
+  if (!form.email.includes('@')) {
+    errors.email = 'Invalid email'
+  }
+  
+  if (form.password.length < 8) {
+    errors.password = 'Password too short'
+  }
+  
+  store.set(errorsAtom, errors)
+  return Object.keys(errors).length === 0
+}
+
+export { validateForm, store }
+```
+
+## Default Store
+
+Jotai has a default store used in provider-less mode:
+
+```jsx
+import { getDefaultStore } from 'jotai'
+
+const defaultStore = getDefaultStore()
+defaultStore.set(countAtom, 10)
+```
+
+<Warning>
+**Provider-less mode**: Using the default store without a Provider is possible but not recommended in most applications. It creates global state that can cause issues in testing and SSR.
+</Warning>
+
+## Testing
+
+Stores are excellent for testing:
+
+```jsx
+import { createStore } from 'jotai'
+import { countAtom, incrementAtom } from './atoms'
+
+test('increment increases count', () => {
+  const store = createStore()
+  
+  // Initialize
+  store.set(countAtom, 0)
+  
+  // Act
+  store.set(incrementAtom)
+  
+  // Assert
+  expect(store.get(countAtom)).toBe(1)
+})
+```
+
+## Performance Implications
+
+### Synchronous Updates
+
+`store.set()` triggers updates synchronously:
+
+```js
+store.set(countAtom, 1)
+store.set(countAtom, 2)
+store.set(countAtom, 3)
+// All three updates happen immediately
+```
+
+Components re-render after each update. For batching multiple updates:
+
+```js
+// Use a single derived atom update
+const updateMultipleAtom = atom(null, (get, set) => {
+  set(atom1, value1)
+  set(atom2, value2)
+  set(atom3, value3)
+})
+
+store.set(updateMultipleAtom)
+```
+
+### Subscription Overhead
+
+Every `store.sub()` call adds overhead. If you need many subscriptions, consider:
+
+```js
+// Instead of subscribing to many atoms
+const unsub1 = store.sub(atom1, callback)
+const unsub2 = store.sub(atom2, callback)
+const unsub3 = store.sub(atom3, callback)
+
+// Create a derived atom
+const combinedAtom = atom((get) => ({
+  a: get(atom1),
+  b: get(atom2),
+  c: get(atom3)
+}))
+
+const unsub = store.sub(combinedAtom, callback)
+```
+
+## Edge Cases
+
+### Async Atoms
+
+Reading async atoms returns a promise:
+
+```js
+const asyncAtom = atom(async () => {
+  const res = await fetch('/api/data')
+  return res.json()
+})
+
+// This might return a promise!
+const value = store.get(asyncAtom)
+
+if (value instanceof Promise) {
+  value.then(data => console.log(data))
+} else {
+  console.log(value) // Already resolved
+}
+```
+
+### Store Lifecycle
+
+<Warning>
+Creating multiple stores for the same atoms creates separate state instances. Make sure you're using the same store in Provider and outside React.
+</Warning>
+
+```js
+// Don't do this!
+const store1 = createStore()
+const store2 = createStore()
+
+store1.set(countAtom, 5)
+store2.get(countAtom) // Different state! Returns initial value
+```
+
+## Best Practices
+
+1. **Single store per app**: Create one store and export it
+2. **Always use Provider**: Pass the store to `<Provider store={store}>`
+3. **Prefer React updates**: Use store outside React only when necessary
+4. **Clean up subscriptions**: Always call the unsubscribe function
+5. **Test with fresh stores**: Create a new store for each test
+
+## Example: Real-Time Dashboard
+
+```jsx
+import { createStore, atom, Provider, useAtomValue } from 'jotai'
+
+const metricsAtom = atom({})
+const store = createStore()
+
+// Poll API every 5 seconds
+setInterval(async () => {
+  const response = await fetch('/api/metrics')
+  const data = await response.json()
+  store.set(metricsAtom, data)
+}, 5000)
+
+function Dashboard() {
+  const metrics = useAtomValue(metricsAtom)
+  return (
+    <div>
+      <h1>System Metrics</h1>
+      <pre>{JSON.stringify(metrics, null, 2)}</pre>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Provider store={store}>
+      <Dashboard />
+    </Provider>
+  )
+}
+
+export { store } // Export for use elsewhere
+```
+
+## Learn More
+
+- [Core Internals](/advanced/core-internals) - How stores work internally
+- [Store API Reference](/api-reference/core#createstore) - Full API documentation
+- [Testing](/essentials/testing) - Testing patterns with stores

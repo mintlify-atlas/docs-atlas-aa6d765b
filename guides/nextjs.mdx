@@ -1,0 +1,240 @@
+---
+title: Next.js Integration
+description: How to use Jotai with Next.js
+---
+
+Jotai works seamlessly with Next.js for both the Pages Router and App Router. This guide covers integration patterns, SSR considerations, and best practices.
+
+## Quick Start
+
+<Steps>
+  <Step title="Install Jotai">
+    ```bash
+    npm install jotai
+    ```
+  </Step>
+
+  <Step title="Add Provider">
+    For SSR, wrap your app with a Provider to scope the store per request:
+
+    ```tsx
+    // pages/_app.tsx (Pages Router)
+    import { Provider } from 'jotai'
+    import type { AppProps } from 'next/app'
+
+    function MyApp({ Component, pageProps }: AppProps) {
+      return (
+        <Provider>
+          <Component {...pageProps} />
+        </Provider>
+      )
+    }
+
+    export default MyApp
+    ```
+  </Step>
+
+  <Step title="Create atoms">
+    ```ts
+    // store/index.ts
+    import { atom } from 'jotai'
+
+    export const countAtom = atom(0)
+    export const userAtom = atom(null)
+    ```
+  </Step>
+</Steps>
+
+## Why Use a Provider?
+
+By default, Jotai uses an implicit global store ("provider-less" mode). In SSR scenarios, this global store persists between requests, which can cause:
+
+- **Memory leaks**: State accumulates across requests
+- **Data leaks**: User data might bleed between requests
+- **Stale data**: Old values persist when they shouldn't
+
+Using a `Provider` creates a store scoped to each request, ensuring clean state per render.
+
+## Hydration
+
+Jotai supports hydrating atoms with server-side data using `useHydrateAtoms`:
+
+```tsx
+import { useHydrateAtoms } from 'jotai/utils'
+import { Provider } from 'jotai'
+
+function HydrateAtoms({ initialValues, children }) {
+  useHydrateAtoms(initialValues)
+  return children
+}
+
+export default function Page({ initialCount }) {
+  return (
+    <Provider>
+      <HydrateAtoms initialValues={[[countAtom, initialCount]]}>
+        <Counter />
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+
+export async function getServerSideProps() {
+  const initialCount = await fetchCount()
+  return { props: { initialCount } }
+}
+```
+
+## SSR Considerations
+
+### No Promises in SSR
+
+You cannot return promises during server-side rendering. Guard against it in atom definitions:
+
+```js
+const postDataAtom = atom((get) => {
+  const id = get(postIdAtom)
+  
+  // Guard against SSR
+  if (typeof window === 'undefined' || prefetchedData[id]) {
+    return prefetchedData[id] || EMPTY_DATA
+  }
+  
+  return fetchData(id) // Returns promise only on client
+})
+```
+
+### Hydrate Server Data
+
+Instead of fetching in atoms, hydrate with server data:
+
+```tsx
+export default function PostPage({ post }) {
+  return (
+    <Provider>
+      <HydrateAtoms initialValues={[[postAtom, post]]}>
+        <Post />
+      </HydrateAtoms>
+    </Provider>
+  )
+}
+
+export async function getServerSideProps({ params }) {
+  const post = await fetchPost(params.id)
+  return { props: { post } }
+}
+```
+
+## App Router (Next.js 13+)
+
+### Client Components
+
+Atoms must be used in Client Components:
+
+```tsx
+'use client'
+
+import { useAtom } from 'jotai'
+import { countAtom } from '@/store'
+
+export function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(c => c + 1)}>Increment</button>
+    </div>
+  )
+}
+```
+
+### Provider in Layout
+
+```tsx
+// app/layout.tsx
+import { Provider } from 'jotai'
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        <Provider>
+          {children}
+        </Provider>
+      </body>
+    </html>
+  )
+}
+```
+
+## Router Synchronization
+
+Sync Jotai with Next.js router using `atomWithHash`:
+
+```js
+import { atomWithHash } from 'jotai-location'
+import Router from 'next/router'
+
+const pageAtom = atomWithHash('page', 1, {
+  replaceState: true,
+  subscribe: (callback) => {
+    Router.events.on('routeChangeComplete', callback)
+    window.addEventListener('hashchange', callback)
+    
+    return () => {
+      Router.events.off('routeChangeComplete', callback)
+      window.removeEventListener('hashchange', callback)
+    }
+  },
+})
+```
+
+<Note>
+In Next.js 13+ App Router, `Router.events` is not available. Hash handling is planned but not yet implemented. Use `replaceState` option for better browser back button support.
+</Note>
+
+## SWC Plugins
+
+Jotai provides SWC plugins for better DX:
+
+```js
+// next.config.js
+module.exports = {
+  experimental: {
+    swcPlugins: [
+      ['@swc-jotai/debug-label', {}],
+      ['@swc-jotai/react-refresh', {}],
+    ],
+  },
+}
+```
+
+These plugins automatically:
+- Add debug labels to atoms
+- Enable React Fast Refresh for atoms
+
+## Examples
+
+### Pages Router Example
+
+```bash
+npx create-next-app --example with-jotai my-app
+```
+
+### Example Repository
+
+Check out the [official Next.js example](https://github.com/vercel/next.js/tree/canary/examples/with-jotai).
+
+## Tips
+
+<Tip>
+Always use a `Provider` in SSR applications to prevent memory leaks and data bleeding between requests.
+</Tip>
+
+<Tip>
+Use `useHydrateAtoms` to initialize atoms with server-side data instead of fetching in atoms during SSR.
+</Tip>
+
+<Note>
+Place at least one `Suspense` boundary inside your `Provider` to avoid endless loops with async atoms.
+</Note>

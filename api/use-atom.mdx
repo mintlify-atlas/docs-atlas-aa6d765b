@@ -1,0 +1,200 @@
+---
+title: useAtom
+description: React hook to read and write atom values
+---
+
+The `useAtom` hook reads an atom value and returns a tuple with the value and a setter function, similar to React's `useState`. It subscribes the component to re-render when the atom value changes.
+
+## Signature
+
+```typescript
+function useAtom<Value, Args extends unknown[], Result>(
+  atom: WritableAtom<Value, Args, Result>,
+  options?: Options,
+): [Awaited<Value>, SetAtom<Args, Result>]
+
+function useAtom<Value>(
+  atom: Atom<Value>,
+  options?: Options,
+): [Awaited<Value>, never]
+```
+
+### Type Definitions
+
+```typescript
+type SetAtom<Args extends unknown[], Result> = (...args: Args) => Result
+
+type Options = {
+  store?: Store
+  delay?: number
+  unstable_promiseStatus?: boolean
+}
+```
+
+## Parameters
+
+<ParamField path="atom" type="Atom<Value> | WritableAtom<Value, Args, Result>" required>
+  The atom to read and write. Can be a primitive atom or a writable derived atom.
+</ParamField>
+
+<ParamField path="options" type="Options" optional>
+  Optional configuration object.
+</ParamField>
+
+<ParamField path="options.store" type="Store" optional>
+  Custom store to use instead of the default Provider store.
+</ParamField>
+
+<ParamField path="options.delay" type="number" optional>
+  Delay in milliseconds before re-rendering when the atom value changes. Useful for waiting for promises to potentially resolve.
+</ParamField>
+
+<ParamField path="options.unstable_promiseStatus" type="boolean" optional>
+  Enable promise status tracking (defaults to `true` for React < 19).
+</ParamField>
+
+## Returns
+
+<ResponseField name="[0]" type="Awaited<Value>">
+  The current value of the atom. If the atom's value is a promise, it will be unwrapped using React Suspense.
+</ResponseField>
+
+<ResponseField name="[1]" type="SetAtom<Args, Result>">
+  A function to update the atom's value. For primitive atoms, it accepts either a new value or an updater function. For derived atoms, it accepts the arguments defined in the atom's write function. Returns `never` for read-only atoms.
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { atom, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+      <button onClick={() => setCount((prev) => prev - 1)}>Decrement</button>
+    </div>
+  )
+}
+```
+
+### With Writable Derived Atom
+
+```typescript
+import { atom, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+const incrementAtom = atom(
+  (get) => get(countAtom),
+  (get, set, amount: number) => {
+    set(countAtom, get(countAtom) + amount)
+  }
+)
+
+function Counter() {
+  const [count, increment] = useAtom(incrementAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => increment(5)}>Add 5</button>
+    </div>
+  )
+}
+```
+
+### With Async Atom
+
+```typescript
+import { atom, useAtom } from 'jotai'
+import { Suspense } from 'react'
+
+const userIdAtom = atom(1)
+
+const userAtom = atom(async (get) => {
+  const userId = get(userIdAtom)
+  const response = await fetch(`/api/users/${userId}`)
+  return response.json()
+})
+
+function UserProfile() {
+  const [user, setUserId] = useAtom(userAtom)
+
+  return (
+    <div>
+      <h1>{user.name}</h1>
+      <button onClick={() => setUserId(2)}>Load User 2</button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UserProfile />
+    </Suspense>
+  )
+}
+```
+
+### With Custom Store
+
+```typescript
+import { atom, createStore, useAtom } from 'jotai'
+
+const countAtom = atom(0)
+const myStore = createStore()
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom, { store: myStore })
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+    </div>
+  )
+}
+```
+
+### With Delay Option
+
+```typescript
+import { atom, useAtom } from 'jotai'
+
+const searchAtom = atom(async (get) => {
+  const query = get(queryAtom)
+  const response = await fetch(`/api/search?q=${query}`)
+  return response.json()
+})
+
+function SearchResults() {
+  // Wait 100ms before re-rendering, allowing promise to potentially resolve
+  const [results, setQuery] = useAtom(searchAtom, { delay: 100 })
+
+  return <div>{results.map(r => <div key={r.id}>{r.title}</div>)}</div>
+}
+```
+
+## Notes
+
+- `useAtom` combines the functionality of `useAtomValue` and `useSetAtom`
+- For read-only atoms, the setter will be `never` and throw an error if called
+- The component will re-render when the atom value changes
+- Promise values are automatically unwrapped using React Suspense
+- The setter function has a stable identity and won't cause re-renders when passed as a prop
+
+## Related APIs
+
+- [useAtomValue](/api/use-atom-value) - Read atom values only
+- [useSetAtom](/api/use-set-atom) - Write atom values only
+- [atom](/api/atom) - Create atoms
+- [Provider](/api/provider) - Provide a custom store

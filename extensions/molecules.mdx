@@ -1,0 +1,113 @@
+---
+title: Molecules
+description: Scoped atoms with bunshi (molecules pattern)
+nav: 4.10
+keywords: molecules,bunshi,scope,dependency injection
+---
+
+Jotai atoms provide a basic solution to optimize re-renders.
+Atoms defined globally can depend on other atoms,
+but they can't depend on props and state within a component tree.
+It's possible to define atoms within a component tree,
+but then you would need to pass those atoms in some ways
+(for example, [atoms-in-atom](../guides/atoms-in-atom.mdx).)
+
+[bunshi](https://github.com/saasquatch/bunshi) is
+a third-party library that provides a "molecules" pattern to help with these use cases.
+It was formerly known as `jotai-molecules`.
+
+See [Motivation](https://github.com/saasquatch/bunshi/tree/v1.1.1#motivation) for more details.
+
+### Install
+
+```
+npm install bunshi
+```
+
+## What are Molecules?
+
+Molecules are a pattern for creating scoped atoms that can depend on React props and context.
+They allow you to:
+
+- Create atoms that are scoped to a part of your component tree
+- Pass props/context values to atom initialization
+- Reuse the same atom definition in multiple places without sharing state
+- Access parent scope atoms from child scopes
+
+## Usage Example
+
+```jsx
+import { atom, useAtom } from 'jotai'
+import { molecule, useMolecule, createScope, ScopeProvider } from 'bunshi/react'
+
+const InitialCountScope = createScope({ initialCount: 0 })
+const countMolecule = molecule((getMol, getScope) => {
+  const { initialCount } = getScope(InitialCountScope)
+  return atom(initialCount)
+})
+
+function Counter() {
+  const countAtom = useMolecule(countMolecule)
+  const [count, setCount] = useAtom(countAtom)
+  return (
+    <div>
+      {count} <button onClick={() => setCount((v) => v + 1)}>+1</button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <div>
+      <h1>With initial value 1</h1>
+      <ScopeProvider scope={InitialCountScope} value={{ initialCount: 1 }}>
+        <Counter />
+        <Counter />
+      </ScopeProvider>
+      <h1>With initial value 2</h1>
+      <ScopeProvider scope={InitialCountScope} value={{ initialCount: 2 }}>
+        <Counter />
+        <Counter />
+      </ScopeProvider>
+      <h1>Default</h1>
+      <Counter />
+      <Counter />
+    </div>
+  )
+}
+```
+
+In this example:
+- Each `ScopeProvider` creates a separate instance of the count atom
+- Counters within the same scope share state
+- Counters in different scopes have independent state
+- The initial value comes from the scope
+
+## Key Concepts
+
+### Molecules
+
+A molecule is a factory function that creates atoms. It receives two parameters:
+- `getMol`: Function to get other molecules
+- `getScope`: Function to get scope values (props/context)
+
+### Scopes
+
+Scopes allow you to pass values (like props or context) to molecules. Create a scope with `createScope()` and provide values with `ScopeProvider`.
+
+### useMolecule
+
+The `useMolecule` hook retrieves the atom instance for the current scope. It automatically handles scope boundaries and atom lifecycle.
+
+## Benefits
+
+- **Dependency Injection**: Pass values to atoms without prop drilling
+- **Isolated State**: Same atom definition, different state per scope
+- **Composition**: Molecules can depend on other molecules
+- **Type Safety**: Full TypeScript support
+
+### Links
+
+- [bunshi on GitHub](https://github.com/saasquatch/bunshi)
+- [bunshi on npm](https://www.npmjs.com/package/bunshi)
+- [Bunshi documentation](https://www.bunshi.org/)

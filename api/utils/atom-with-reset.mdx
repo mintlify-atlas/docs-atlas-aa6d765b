@@ -1,0 +1,134 @@
+---
+title: atomWithReset
+description: API reference for atomWithReset utility
+---
+
+`atomWithReset` creates a writable atom that can be reset to its initial value using the `RESET` symbol.
+
+## Import
+
+```typescript
+import { atomWithReset } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+function atomWithReset<Value>(
+  initialValue: Value,
+): WritableAtom<Value, [SetStateActionWithReset<Value>], void>
+
+type SetStateActionWithReset<Value> =
+  | Value
+  | typeof RESET
+  | ((prev: Value) => Value | typeof RESET)
+```
+
+## Parameters
+
+<ParamField path="initialValue" type="Value" required>
+  The initial value of the atom, which will be restored when reset
+</ParamField>
+
+## Return Value
+
+Returns a writable atom that accepts:
+- A new value
+- The `RESET` symbol to reset to initial value
+- An update function that can return a new value or `RESET`
+
+## Usage Example
+
+```typescript
+import { useAtom } from 'jotai'
+import { atomWithReset, RESET } from 'jotai/utils'
+
+const countAtom = atomWithReset(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>Increment</button>
+      <button onClick={() => setCount(RESET)}>Reset</button>
+    </div>
+  )
+}
+```
+
+## Advanced Example
+
+```typescript
+import { atomWithReset, RESET } from 'jotai/utils'
+
+// With complex state
+const formAtom = atomWithReset({
+  name: '',
+  email: '',
+  message: ''
+})
+
+function ContactForm() {
+  const [form, setForm] = useAtom(formAtom)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await submitForm(form)
+    setForm(RESET) // Reset to initial state after submit
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        value={form.name}
+        onChange={(e) => setForm({ ...form, name: e.target.value })}
+      />
+      <input
+        value={form.email}
+        onChange={(e) => setForm({ ...form, email: e.target.value })}
+      />
+      <textarea
+        value={form.message}
+        onChange={(e) => setForm({ ...form, message: e.target.value })}
+      />
+      <button type="submit">Submit</button>
+      <button type="button" onClick={() => setForm(RESET)}>
+        Reset Form
+      </button>
+    </form>
+  )
+}
+```
+
+## Conditional Reset
+
+```typescript
+import { atomWithReset, RESET } from 'jotai/utils'
+
+const valueAtom = atomWithReset(10)
+
+function Component() {
+  const [value, setValue] = useAtom(valueAtom)
+
+  const resetIfNegative = () => {
+    setValue((prev) => (prev < 0 ? RESET : prev))
+  }
+
+  return (
+    <div>
+      <p>Value: {value}</p>
+      <button onClick={() => setValue((v) => v - 1)}>Decrement</button>
+      <button onClick={resetIfNegative}>Reset if Negative</button>
+    </div>
+  )
+}
+```
+
+## Notes
+
+- The `RESET` symbol is a unique symbol exported from `jotai/utils`
+- The initial value is stored internally and cannot be changed after atom creation
+- This atom works seamlessly with other Jotai utilities
+- You can use `RESET` in updater functions for conditional resets

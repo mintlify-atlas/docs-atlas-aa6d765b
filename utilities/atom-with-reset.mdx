@@ -1,0 +1,158 @@
+---
+title: atomWithReset
+description: Create an atom that can be reset to its initial value
+---
+
+`atomWithReset` creates a writable atom that can be reset to its initial value using the `RESET` symbol.
+
+## Signature
+
+```ts
+function atomWithReset<Value>(
+  initialValue: Value
+): WritableAtom<Value, [SetStateActionWithReset<Value>], void>
+
+type SetStateActionWithReset<Value> =
+  | Value
+  | typeof RESET
+  | ((prev: Value) => Value | typeof RESET)
+```
+
+<ParamField path="initialValue" type="Value" required>
+  The initial value of the atom
+</ParamField>
+
+## Usage
+
+### Basic reset functionality
+
+```tsx
+import { atomWithReset, RESET } from 'jotai/utils'
+import { useAtom } from 'jotai'
+
+const countAtom = atomWithReset(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  
+  return (
+    <div>
+      <div>Count: {count}</div>
+      <button onClick={() => setCount(c => c + 1)}>Increment</button>
+      <button onClick={() => setCount(RESET)}>Reset</button>
+    </div>
+  )
+}
+```
+
+### Resetting from updater function
+
+```tsx
+import { atomWithReset, RESET } from 'jotai/utils'
+import { useAtom } from 'jotai'
+
+const textAtom = atomWithReset('Hello')
+
+function TextEditor() {
+  const [text, setText] = useAtom(textAtom)
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value)
+  }
+  
+  const handleReset = () => {
+    setText(prev => prev === '' ? prev : RESET)
+  }
+  
+  return (
+    <div>
+      <input value={text} onChange={handleChange} />
+      <button onClick={handleReset}>Reset if not empty</button>
+    </div>
+  )
+}
+```
+
+### Form with reset
+
+```tsx
+import { atomWithReset, RESET } from 'jotai/utils'
+import { useAtom } from 'jotai'
+
+const initialFormState = {
+  name: '',
+  email: '',
+  message: ''
+}
+
+const formAtom = atomWithReset(initialFormState)
+
+function ContactForm() {
+  const [form, setForm] = useAtom(formAtom)
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    // Submit form...
+    setForm(RESET) // Reset form after submission
+  }
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        value={form.name}
+        onChange={(e) => setForm({ ...form, name: e.target.value })}
+        placeholder="Name"
+      />
+      <input
+        value={form.email}
+        onChange={(e) => setForm({ ...form, email: e.target.value })}
+        placeholder="Email"
+      />
+      <textarea
+        value={form.message}
+        onChange={(e) => setForm({ ...form, message: e.target.value })}
+        placeholder="Message"
+      />
+      <button type="submit">Submit</button>
+      <button type="button" onClick={() => setForm(RESET)}>Clear</button>
+    </form>
+  )
+}
+```
+
+### Using with useResetAtom
+
+```tsx
+import { atomWithReset } from 'jotai/utils'
+import { useAtom, useSetAtom } from 'jotai'
+import { useResetAtom } from 'jotai/utils'
+
+const countAtom = atomWithReset(0)
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom)
+  const resetCount = useResetAtom(countAtom)
+  
+  return (
+    <div>
+      <div>Count: {count}</div>
+      <button onClick={() => setCount(c => c + 1)}>Increment</button>
+      <button onClick={resetCount}>Reset</button>
+    </div>
+  )
+}
+```
+
+## Features
+
+- **Simple reset**: Use the `RESET` symbol to reset to the initial value
+- **Type-safe**: Full TypeScript support with proper type inference
+- **Composable**: Works with other Jotai utilities and hooks
+- **Updater support**: Can return `RESET` from updater functions
+
+## Notes
+
+- The `RESET` symbol is exported from `jotai/utils`
+- You can use `RESET` directly or return it from an updater function
+- The initial value is stored and used whenever `RESET` is passed
+- Works seamlessly with `useResetAtom` hook for convenience

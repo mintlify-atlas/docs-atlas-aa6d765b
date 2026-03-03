@@ -1,0 +1,232 @@
+---
+title: freezeAtom
+description: API reference for freezeAtom utility
+---
+
+`freezeAtom` wraps an atom to deeply freeze its values in development, helping catch mutations.
+
+## Import
+
+```typescript
+import { freezeAtom } from 'jotai/utils'
+```
+
+## Signature
+
+```typescript
+function freezeAtom<AtomType extends Atom<unknown>>(
+  anAtom: AtomType,
+): AtomType
+```
+
+## Parameters
+
+<ParamField path="anAtom" type="AtomType extends Atom<unknown>" required>
+  The atom to freeze. Its values will be deeply frozen using `Object.freeze`
+</ParamField>
+
+## Return Value
+
+Returns the same atom instance with modified read/write functions that:
+- Deep freeze values when reading
+- Deep freeze values before setting (for writable atoms)
+
+## Usage Example
+
+```typescript
+import { atom } from 'jotai'
+import { freezeAtom } from 'jotai/utils'
+
+const objectAtom = freezeAtom(
+  atom({ count: 0, nested: { value: 'test' } })
+)
+
+function Component() {
+  const [obj, setObj] = useAtom(objectAtom)
+
+  // This will throw an error in development
+  // obj.count++ // Error: Cannot assign to read only property
+
+  // Correct way: create a new object
+  const increment = () => {
+    setObj({ ...obj, count: obj.count + 1 })
+  }
+
+  return (
+    <div>
+      <p>Count: {obj.count}</p>
+      <button onClick={increment}>Increment</button>
+    </div>
+  )
+}
+```
+
+## Array Example
+
+```typescript
+import { atom } from 'jotai'
+import { freezeAtom } from 'jotai/utils'
+
+const todosAtom = freezeAtom(
+  atom([
+    { id: 1, text: 'Learn Jotai', completed: false },
+    { id: 2, text: 'Build app', completed: false },
+  ])
+)
+
+function TodoList() {
+  const [todos, setTodos] = useAtom(todosAtom)
+
+  const toggleTodo = (id: number) => {
+    // This will throw in development:
+    // const todo = todos.find(t => t.id === id)
+    // todo.completed = !todo.completed // Error!
+
+    // Correct way:
+    setTodos(
+      todos.map((todo) =>
+        todo.id === id ? { ...todo, completed: !todo.completed } : todo
+      )
+    )
+  }
+
+  return (
+    <ul>
+      {todos.map((todo) => (
+        <li key={todo.id} onClick={() => toggleTodo(todo.id)}>
+          {todo.text}
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+## Nested Objects
+
+```typescript
+import { atom } from 'jotai'
+import { freezeAtom } from 'jotai/utils'
+
+const userAtom = freezeAtom(
+  atom({
+    profile: {
+      name: 'Alice',
+      settings: {
+        theme: 'dark',
+        notifications: true,
+      },
+    },
+  })
+)
+
+function UserSettings() {
+  const [user, setUser] = useAtom(userAtom)
+
+  const updateTheme = (theme: string) => {
+    // Deep freeze prevents this:
+    // user.profile.settings.theme = theme // Error!
+
+    // Must create new objects at each level:
+    setUser({
+      ...user,
+      profile: {
+        ...user.profile,
+        settings: {
+          ...user.profile.settings,
+          theme,
+        },
+      },
+    })
+  }
+
+  return (
+    <div>
+      <p>Theme: {user.profile.settings.theme}</p>
+      <button onClick={() => updateTheme('light')}>Light Mode</button>
+    </div>
+  )
+}
+```
+
+## Catching Bugs in Development
+
+```typescript
+import { atom } from 'jotai'
+import { freezeAtom } from 'jotai/utils'
+
+interface CartItem {
+  id: number
+  quantity: number
+}
+
+const cartAtom = freezeAtom(atom<CartItem[]>([]))
+
+function Cart() {
+  const [cart, setCart] = useAtom(cartAtom)
+
+  const addItem = (item: CartItem) => {
+    // BUG: This mutates the array and will throw in development
+    // cart.push(item) // Error: Cannot add property, object is not extensible
+
+    // Correct:
+    setCart([...cart, item])
+  }
+
+  const updateQuantity = (id: number, quantity: number) => {
+    // BUG: This mutates an object and will throw
+    // const item = cart.find(i => i.id === id)
+    // if (item) item.quantity = quantity // Error!
+
+    // Correct:
+    setCart(
+      cart.map((item) => (item.id === id ? { ...item, quantity } : item))
+    )
+  }
+
+  return <div>{/* ... */}</div>
+}
+```
+
+## With Derived Atoms
+
+```typescript
+import { atom } from 'jotai'
+import { freezeAtom } from 'jotai/utils'
+
+const baseAtom = freezeAtom(
+  atom({ items: [1, 2, 3], metadata: { total: 3 } })
+)
+
+const totalAtom = atom((get) => {
+  const base = get(baseAtom)
+  // base is frozen, preventing accidental mutations
+  return base.items.reduce((sum, item) => sum + item, 0)
+})
+```
+
+## Deprecated: freezeAtomCreator
+
+<Warning>
+  `freezeAtomCreator` is deprecated. Define the wrapper on the user end instead.
+</Warning>
+
+```typescript
+// Deprecated
+import { freezeAtomCreator } from 'jotai/utils'
+
+// Instead, create your own wrapper:
+const createFrozenAtom = <T>(initialValue: T) => {
+  return freezeAtom(atom(initialValue))
+}
+```
+
+## Notes
+
+- Deep freezing is a development-time debugging aid and has performance implications
+- Only use in development environments to catch mutation bugs
+- `Object.freeze` is applied recursively to all nested objects and arrays
+- Frozen atoms enforce immutability and help identify code that incorrectly mutates state
+- The atom reference itself is modified in place; the same atom instance is returned
+- If the atom is already frozen, calling `freezeAtom` again has no effect
+- Primitives (strings, numbers, booleans) are inherently immutable and unaffected

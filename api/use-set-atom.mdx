@@ -1,0 +1,254 @@
+---
+title: useSetAtom
+description: React hook to write atom values
+---
+
+The `useSetAtom` hook returns a setter function for a writable atom without subscribing to value changes. Use this hook when you only need to update the atom value and don't need to read it.
+
+## Signature
+
+```typescript
+function useSetAtom<Value, Args extends unknown[], Result>(
+  atom: WritableAtom<Value, Args, Result>,
+  options?: Options,
+): SetAtom<Args, Result>
+```
+
+### Type Definitions
+
+```typescript
+type SetAtom<Args extends unknown[], Result> = (...args: Args) => Result
+
+type Options = {
+  store?: Store
+}
+```
+
+## Parameters
+
+<ParamField path="atom" type="WritableAtom<Value, Args, Result>" required>
+  The writable atom to update. Must be a primitive atom or a writable derived atom.
+</ParamField>
+
+<ParamField path="options" type="Options" optional>
+  Optional configuration object.
+</ParamField>
+
+<ParamField path="options.store" type="Store" optional>
+  Custom store to use instead of the default Provider store.
+</ParamField>
+
+## Returns
+
+<ResponseField name="setAtom" type="SetAtom<Args, Result>">
+  A setter function to update the atom's value. The function signature depends on the atom's write function:
+  - For primitive atoms: `(value: Value | ((prev: Value) => Value)) => void`
+  - For writable derived atoms: `(...args: Args) => Result`
+  
+  The setter function has a stable identity and won't change across re-renders.
+</ResponseField>
+
+## Examples
+
+### Basic Usage with Primitive Atom
+
+```typescript
+import { atom, useSetAtom, useAtomValue } from 'jotai'
+
+const countAtom = atom(0)
+
+function Controls() {
+  const setCount = useSetAtom(countAtom)
+
+  return (
+    <div>
+      <button onClick={() => setCount(0)}>Reset</button>
+      <button onClick={() => setCount((prev) => prev + 1)}>Increment</button>
+    </div>
+  )
+}
+
+function Display() {
+  const count = useAtomValue(countAtom)
+  return <div>Count: {count}</div>
+}
+```
+
+### With Writable Derived Atom
+
+```typescript
+import { atom, useSetAtom } from 'jotai'
+
+const countAtom = atom(0)
+
+const incrementAtom = atom(
+  null,
+  (get, set, amount: number) => {
+    set(countAtom, get(countAtom) + amount)
+  }
+)
+
+function Controls() {
+  const increment = useSetAtom(incrementAtom)
+
+  return (
+    <div>
+      <button onClick={() => increment(1)}>+1</button>
+      <button onClick={() => increment(5)}>+5</button>
+      <button onClick={() => increment(10)}>+10</button>
+    </div>
+  )
+}
+```
+
+### Multiple Actions
+
+```typescript
+import { atom, useSetAtom } from 'jotai'
+
+type Todo = { id: number; text: string; done: boolean }
+
+const todosAtom = atom<Todo[]>([])
+
+const addTodoAtom = atom(
+  null,
+  (get, set, text: string) => {
+    const newTodo = {
+      id: Date.now(),
+      text,
+      done: false,
+    }
+    set(todosAtom, [...get(todosAtom), newTodo])
+  }
+)
+
+const removeTodoAtom = atom(
+  null,
+  (get, set, id: number) => {
+    set(todosAtom, get(todosAtom).filter(todo => todo.id !== id))
+  }
+)
+
+const toggleTodoAtom = atom(
+  null,
+  (get, set, id: number) => {
+    set(todosAtom, get(todosAtom).map(todo =>
+      todo.id === id ? { ...todo, done: !todo.done } : todo
+    ))
+  }
+)
+
+function TodoControls() {
+  const addTodo = useSetAtom(addTodoAtom)
+  const removeTodo = useSetAtom(removeTodoAtom)
+  const toggleTodo = useSetAtom(toggleTodoAtom)
+
+  return (
+    <div>
+      <button onClick={() => addTodo('New task')}>Add Todo</button>
+      {/* Use removeTodo and toggleTodo in todo items */}
+    </div>
+  )
+}
+```
+
+### With Custom Store
+
+```typescript
+import { atom, createStore, useSetAtom } from 'jotai'
+
+const countAtom = atom(0)
+const myStore = createStore()
+
+function Controls() {
+  const setCount = useSetAtom(countAtom, { store: myStore })
+
+  return (
+    <button onClick={() => setCount((prev) => prev + 1)}>
+      Increment
+    </button>
+  )
+}
+```
+
+### Async Write Action
+
+```typescript
+import { atom, useSetAtom } from 'jotai'
+
+const todosAtom = atom<Todo[]>([])
+
+const fetchTodosAtom = atom(
+  null,
+  async (get, set) => {
+    const response = await fetch('/api/todos')
+    const todos = await response.json()
+    set(todosAtom, todos)
+  }
+)
+
+function TodoList() {
+  const fetchTodos = useSetAtom(fetchTodosAtom)
+
+  return (
+    <button onClick={() => fetchTodos()}>
+      Fetch Todos
+    </button>
+  )
+}
+```
+
+### Form Handler
+
+```typescript
+import { atom, useSetAtom } from 'jotai'
+
+const nameAtom = atom('')
+const emailAtom = atom('')
+
+const submitFormAtom = atom(
+  null,
+  async (get, set) => {
+    const name = get(nameAtom)
+    const email = get(emailAtom)
+
+    await fetch('/api/submit', {
+      method: 'POST',
+      body: JSON.stringify({ name, email }),
+    })
+
+    // Reset form
+    set(nameAtom, '')
+    set(emailAtom, '')
+  }
+)
+
+function Form() {
+  const submitForm = useSetAtom(submitFormAtom)
+
+  return (
+    <form onSubmit={(e) => {
+      e.preventDefault()
+      submitForm()
+    }}>
+      {/* form fields */}
+      <button type="submit">Submit</button>
+    </form>
+  )
+}
+```
+
+## Notes
+
+- Unlike `useAtom`, this hook does **not** subscribe to atom value changes, preventing unnecessary re-renders
+- The setter function has a stable identity across re-renders
+- Throws an error if used with a read-only atom
+- Perfect for event handlers and callbacks where you only need to update state
+- The setter can be safely passed to child components without causing re-renders
+
+## Related APIs
+
+- [useAtom](/api/use-atom) - Read and write atom values
+- [useAtomValue](/api/use-atom-value) - Read atom values only
+- [atom](/api/atom) - Create atoms
+- [Provider](/api/provider) - Provide a custom store
